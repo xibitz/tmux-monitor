@@ -188,6 +188,15 @@ hasil in-flight dari credential lama tidak boleh ditampilkan sebagai fresh.
 
 ## Titik lanjut tepat: T12
 
+Catatan onboarding tambahan: `target-host.pub` adalah salinan public host key
+yang harus disediakan operator; tidak dibuat oleh `ssh-keygen -lf` atau CLI hub.
+Endpoint **Tailscale SSH** dapat menyajikan key lain dari OpenSSH `/etc/ssh`.
+Verifikasi terhadap `sshHostKeys` metadata node Tailscale yang terautentikasi dan
+cocokkan key koneksi; scan jaringan saja bukan sumber kepercayaan. Dukungan
+terakhir hanya memverifikasi/menyimpan public pin pada lokasi operator, belum
+menjalankan probe tmux terautentikasi ke host pengguna atau mengganti konfigurasi
+hub. Tidak ada hostname/fingerprint pribadi yang dicatat di repositori.
+
 1. Baca task T12/T13, ADR 0001/0002 dan FR-04/06/09. Pastikan git status dan
    konfigurasi runtime aktual; jangan berasumsi proses backend memakai source
    terbaru hanya karena Vite melakukan hot reload.

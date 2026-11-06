@@ -112,7 +112,9 @@ setelah hub dimulai ulang agar saran alamat diperbarui.
    ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256
    ```
 
-   Salin file public key tersebut ke hub. `ssh-keyscan` saja tidak membuktikan
+   Untuk OpenSSH biasa, salin file public key tersebut ke hub, misalnya menjadi
+   `~/.ssh/target-host.pub`. Nama ini hanya lokasi salinan; file tidak dibuat oleh
+   `ssh-keygen -lf` maupun `hub ssh-configure`. `ssh-keyscan` saja tidak membuktikan
    identitas host; CLI tidak melakukan trust-on-first-use dari hasil scan jaringan.
 4. Hentikan backend lama sebelum upgrade binary/skema, buat backup konsisten data
    penting, jalankan `make build`, lalu muat environment yang menunjuk direktori
@@ -135,7 +137,26 @@ setelah hub dimulai ulang agar saran alamat diperbarui.
    berikutnya mempertahankan snapshot terakhir dengan label stale. Tanpa server
    tmux aktif, SSH tetap online dengan daftar session kosong.
 
-Mencabut konfigurasi lokal:
+### Jika host memakai Tailscale SSH
+
+[Tailscale SSH](https://tailscale.com/docs/features/tailscale-ssh) memakai host key
+sendiri untuk endpoint yang ditanganinya. Key tersebut dapat berbeda dari
+`/etc/ssh/ssh_host_ed25519_key.pub` milik OpenSSH. Pin harus sesuai dengan layanan
+SSH yang benar-benar menjawab pada alamat/port profil.
+
+Verifikasi public key node melalui metadata klien Tailscale yang sudah
+terautentikasi (`sshHostKeys` pada peer yang sesuai di `tailscale status --json`),
+lalu cocokkan fingerprint dengan key koneksi tujuan. Simpan public key yang
+terverifikasi ke file `--host-key-file`; jangan mengganti fingerprint hanya
+berdasarkan hasil scan jaringan. Jangan menyalin private host key dari `/etc/ssh`.
+
+Pada Tailscale SSH, kebijakan Tailscale menentukan autentikasi/otorisasi;
+`authorized_keys` adalah pengaturan OpenSSH biasa. CLI hub saat ini tetap meminta
+private key lokal, dan kesesuaian mode autentikasi Tailscale SSH perlu diuji
+terhadap policy instalasi. Pengujian otomatis saat ini memakai server SSH test,
+bukan bukti seluruh mode policy Tailscale SSH sudah diterima.
+
+### Mencabut konfigurasi lokal
 
 ```sh
 ./bin/hub ssh-revoke --host-id h_ID_DARI_DETAIL
