@@ -70,8 +70,9 @@ globally and one per host; excess requests return 429. Stdout is limited to 1 Mi
 Inventory has `hostId`, `socketId`, `transport`, `state`, `statusReason`,
 `observedAt`, `stale`, `epoch`, `capabilities`, and nested sessions/windows/panes
 with native IDs and revisions. A fresh empty inventory is valid when SSH works
-but no tmux server exists (`epoch:""`, `serverRunning:false`). PTY/control mode
-capabilities remain false until separately implemented and tested. Cached data
+but no tmux server exists (`epoch:""`, `serverRunning:false`). Inventory PTY capability remains false: it does not advertise conditional
+experimental read-only eligibility. Terminal options and fresh per-viewer policy
+checks govern that slice. Control/independent-pane capabilities remain false. Cached data
 always retains its original `observedAt` and is marked `stale:true` after failure.
 No stale snapshot is presented as live. With no cache, failures are sanitized
 422 configuration/validation, 423 unreachable, 429 busy, or 503 degraded/unsupported.

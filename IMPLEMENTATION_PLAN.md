@@ -15,7 +15,7 @@ pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus
 |---|---|---|
 | T00 | DONE | Struktur Go/React, build, CI, konfigurasi contoh, migrasi 001 naik/turun, health. CI Linux dan uji lokal lulus. |
 | T01 | TODO | Matriks host Linux/Agent dan HP Android/iOS nyata belum disiapkan. |
-| T02 | PARTIAL | Spike tmux 3.8 macOS: manual sizing tanpa desktop/dua window/PTY resize/detach lulus; minimum 3.7 enforced untuk viewer. Matriks versi/perangkat luas dan control mode belum tuntas. |
+| T02 | PARTIAL | Spike tmux 3.8 macOS/Linux: manual sizing tanpa desktop/dua window/PTY resize/detach lulus; minimum 3.7 enforced untuk viewer. Matriks versi/perangkat luas dan control mode belum tuntas. |
 | T03 | PARTIAL | Login/ACL/CSRF/Origin/audit dan localhost-only diuji; live Serve/Grants negative tests belum. |
 | T10 | DONE | Key store/CLI configure-revoke, pin dan algoritme host key, tailnet address guard, bounded probe/API/UI; uji lokal dan CI Linux lulus. Uji tailnet nyata tetap T01/T03. |
 | T11 | DONE | Parser/epoch/revision, SSH snapshot, cache stale/revoke dan UI; uji tmux nyata terisolasi di macOS serta CI Linux lulus (empty/rename/split/kill/restart). |
@@ -56,6 +56,10 @@ pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus
 - [x] Checkpoint: format/vet/TypeScript/race/build/CI; update memory dan status.
 
 Bukti kode checkpoint `33466f0`: [CI Linux sukses](https://github.com/xibitz/tmux-monitor/actions/runs/42206312482).
+Irisan T12/T13 read-only `6cdca59`: [CI Linux sukses](https://github.com/xibitz/tmux-monitor/actions/runs/42307000042),
+termasuk SSH+PTY/tmux 3.8, bounded buffers, sizing spike dan build statis.
+Minimum viewer 3.7; tmux 3.6a bawaan runner ditolak karena bug manual sizing.
+Rincian temuan, batas dan langkah lanjut berada di MEMORY.md.
 Lengkapi T12 interactive berikutnya; gate versi/perangkat/akses T02/T03 tetap harus
 dipenuhi sebelum terminal dipakai pada host nyata. T10/T11 DONE tidak berarti M1
 atau rilis P0 sudah selesai.

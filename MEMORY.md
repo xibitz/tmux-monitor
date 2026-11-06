@@ -204,6 +204,15 @@ berhasil dibaca lewat sesi Chrome GitHub yang sudah terautentikasi. Tidak ada
 container/data aplikasi pengguna yang dipakai. Jangan klaim test Docker lulus.
 Cross-build Linux/amd64 CGO_ENABLED=0 lokal lulus.
 
+Koreksi kompatibilitas: `6cdca59` sudah dipush melalui SSH; make check/test/build
+dan spike lokal diulang dan lulus. CI perbaikan:
+https://github.com/xibitz/tmux-monitor/actions/runs/42307000042
+**CI Linux sukses**, termasuk make check/test/build, spike multi-klien tmux 3.8,
+static Linux/amd64 build tanpa CGO dan artifact. Ini bukti kode `6cdca59`;
+commit dokumentasi sesudahnya tidak mengubah implementasi.
+Postman CLI lokal tidak mendukung `status`; verifikasi memakai kontrak lokal
+dan suite Go/SSH/WS/browser, bukan hasil Postman yang diasumsikan.
+
 Kontrak berada di docs/api-v1.md. Backend baru memakai schema 3 (kolom target
 pada audit), dependensi coder/websocket 1.8.15, xterm 6.0.0 dan creack/pty 1.1.24
 (PTY hanya untuk test server). **T12/T13 PARTIAL**, interactive, mobile keyboard,
