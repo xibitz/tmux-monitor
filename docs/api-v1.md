@@ -9,7 +9,7 @@ All timestamps use RFC 3339 UTC. All responses under `/api` and `/ws` use
 
 | Method and path | Authorization | Request / response |
 | --- | --- | --- |
-| `GET /healthz` | Local listener | `{"status":"ok","schemaVersion":2}`; 503 if storage is unavailable |
+| `GET /healthz` | Local listener | `{"status":"ok","schemaVersion":3}`; 503 if storage is unavailable |
 | `POST /api/v1/auth/login` | Exact configured Origin, rate limited | `{username,password}` → `{user,csrfToken}` and session cookie; generic 401 for invalid credentials |
 | `GET /api/v1/me` | Session | `{user:{id,username,isAdmin},csrfToken}` |
 | `POST /api/v1/auth/logout` | Session + CSRF | 204; revoke session and expire cookie |
@@ -77,13 +77,61 @@ No stale snapshot is presented as live. With no cache, failures are sanitized
 422 configuration/validation, 423 unreachable, 429 busy, or 503 degraded/unsupported.
 No raw SSH/command stderr is returned or persisted. Probe failures are audited.
 
+## Experimental SSH read-only terminal (T12, partial)
+
+Disabled by default: operator must set `TMUX_MONITOR_TERMINAL_ENABLED=true`.
+This is a development slice, not completion of the P0 access/device gates.
+Only SSH session viewing is available; interactive input and viewport resizing
+are rejected. No automatic reconnect or input replay. All requests require login.
+
+`GET /api/v1/terminal/options` returns `{enabled,mode:"read_only"}`.
+`POST /api/v1/terminal/tickets` requires exact Origin, REST CSRF and `tmux:read`.
+Body: `{hostId,sessionId,epoch}` (native `$N` session ID). Response:
+`{ticket,expiresIn:30}`. The random ticket is stored hashed, usable once, bound to
+the login token, user, host, socket, credential reference, epoch and target.
+Maximum 64 pending tickets globally / 8 per login. No token in URLs or logs.
+
+Browser upgrades `/ws/v1/terminal` with cookie, exact Origin and subprotocols
+`["tmux.v1","ticket.<ticket>"]`; server selects only `tmux.v1`. Upgrade consumes
+the ticket, rechecks authorization and reserves a viewer (8 global / 4 per user /
+4 per host). Unsupported/missing protocols are rejected. No REST CSRF header is
+needed on upgrade: the one-use ticket was issued by a CSRF-protected POST.
+
+The connector freshly verifies the pinned SSH host, OS user, tmux server epoch
+and session. Requires tmux >=3.4, global default `window-size manual` and every
+window in the selected session effectively `manual`. The application never
+changes remote options. Otherwise it reports `terminal_size_policy` and does not
+attach. The PTY uses the active remote window size plus its status rows (maximum
+500 columns / 205 rows); it does not follow browser dimensions. Attach uses
+`read-only,ignore-size`. Policy/target/epoch and login/ACL/credential reference
+are rechecked every 2 seconds; changes close the viewer. An operator changing
+remote options during viewing can affect tmux before the next check.
+
+`terminal.opened` JSON contains `viewerId` (32 hex digits), `mode:"read_only"`,
+`cols`, `rows`, `generation:1`, `sequence:0`. Target is bound at ticket issue;
+there is no second `terminal.open` message. Each binary output frame has a
+30-byte header: version uint8=1, direction uint8=0 (server output), generation
+uint32BE=1, sequence uint64BE starting at 1, viewer ID raw 16 bytes; then PTY bytes.
+Chunks <=32 KiB; incoming message limit 64 KiB. Any client binary/input/mode or
+resize request closes with `input_forbidden` (no bytes sent to SSH stdin).
+Only `{"type":"terminal.detach"}` is accepted from the client.
+
+`terminal.closed` contains `reason`; `error` contains sanitized `code`;
+`resync_required` asks for a fresh viewer after backpressure. Queue maximum
+1 MiB per viewer, write deadline 2 seconds, viewer lifetime 30 minutes. Closing
+only detaches the SSH client. No terminal contents are cached or audited.
+Audit open/close/denial records include host, epoch/native target and reason.
+The browser disables stdin, OSC52 clipboard, window manipulation and automatic
+link activation; xterm write backlog is capped. Manual reopening gets a new
+ticket, generation and empty renderer.
+
 New reasons include `credentials_required`, `credentials_invalid`,
 `address_not_allowed`, `address_not_tailnet`, `host_key_mismatch`,
 `authentication_failed`, `timeout`, `connection_failed`, `os_user_mismatch`,
 `tmux_missing`, `inventory_invalid`, `inventory_changed`, `output_limit`,
 `agent_unavailable`. An SSH connection failure never means a tmux process died.
 
-`AuditEvent` contains `id`, `actor`, `action`, optional `hostId`, `result`,
+`AuditEvent` contains `id`, `actor`, `action`, optional `hostId` and `target`, `result`,
 `requestId`, and `at`. Audit metadata never includes passwords, session tokens,
 credentials, terminal input/output, or raw HTTP request bodies. Administrative
 host changes and their success audit record commit in the same transaction.
@@ -91,4 +139,5 @@ host changes and their success audit record commit in the same transaction.
 Errors: 400 malformed JSON, 401 unauthenticated, 403 forbidden/CSRF/Origin,
 404 absent or inaccessible target, 405 method not allowed, 422 validation,
 429 rate limit, 503 unavailable, 500 internal error. Unknown API/WS endpoints
-require login before returning JSON 404. Terminal upgrades are not implemented.
+require login before returning JSON 404. Terminal upgrades follow the experimental
+contract above and are disabled unless explicitly enabled by the operator.

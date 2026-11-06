@@ -10,12 +10,57 @@ Konektor SSH sekarang mendukung key khusus hub, pin host key, probe serta invent
 session/window/pane tmux dengan epoch dan cache stale. Asset web disertakan dalam
 binary hub setelah build. Kredensial dipasang melalui CLI lokal, bukan formulir.
 
-**Terminal PTY/WebSocket dan konektor Agent belum tersedia.** SSH saat ini hanya
-membaca inventaris; tidak attach atau memodifikasi session. Belum ada service
+**Viewer terminal SSH read-only tersedia secara eksperimental dan nonaktif secara
+default.** Input interaktif dan konektor Agent belum tersedia. Belum ada service
 worker, control mode, pairing agent, atau notifikasi. Gate rilis P0 belum lulus.
 
 Agent berikutnya mulai dari [MEMORY.md](MEMORY.md). Status setiap task dan gate
 berada di [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
+
+## Terminal read-only eksperimental
+
+Setelah SSH/inventaris berfungsi, operator dapat mencoba viewer dengan
+`TMUX_MONITOR_TERMINAL_ENABLED=true` pada environment hub, lalu restart backend.
+Muat `.env` seperti langkah development di bawah. Jangan menganggap fitur ini
+sudah lulus pengujian HP nyata atau akses Serve/Grants; gate tersebut masih terbuka.
+Backend baru menjalankan migrasi **003** untuk target audit. Backup data sebelum
+upgrade. CLI dan server harus tetap memakai direktori data yang sama.
+
+Di detail host, klik **Periksa koneksi** untuk inventaris baru, lalu **Buka
+terminal read-only** di session. Viewer hanya menampilkan session aktif bersama
+klien tmux lain. Ia tidak menyediakan pane independen atau input keyboard.
+Ukuran mengikuti window remote; layar ponsel dapat digeser. Tutup/Kembali hanya
+detach. Bila putus, **Buka ulang** membuat viewer baru tanpa replay input.
+
+Prasyarat ukuran: tmux **3.4+**, default global `window-size manual` dan semua
+window pada session yang dilihat juga efektif `manual`. Tanpa itu, viewer menolak
+attach dengan pesan kebijakan ukuran. Aplikasi **tidak mengubah opsi tmux host**.
+Operator yang memilih kebijakan ini dapat menjalankan perintah berikut pada host
+target (sesuaikan socket dan native session ID dari inventaris):
+
+```sh
+# Catat opsi lama dahulu untuk dikembalikan sesuai konfigurasi Anda.
+tmux -L default show-options -gwv window-size
+tmux -L default list-windows -t '$0' -F '#{window_id} #{window-size} #{window_width}x#{window_height}'
+
+# Default untuk window baru; berdampak pada seluruh socket ini.
+tmux -L default set-option -gw window-size manual
+# Ulangi untuk SETIAP native window ID dalam session yang akan dilihat.
+tmux -L default set-option -w -t '@0' window-size manual
+```
+
+Mode manual menghentikan penyesuaian ukuran otomatis dari klien desktop. Ubah
+ukuran secara sadar dengan `resize-window` bila diperlukan. Hub tidak meresize
+window. Viewer ditutup bila window aktif, ukuran, epoch, opsi atau akses berubah;
+pengecekan dijadwalkan setiap 2 detik dengan batas waktu 2 detik untuk masing-masing
+pemeriksaan izin dan SSH. Perubahan eksternal dapat
+memengaruhi tmux sebelum pemeriksaan berikutnya. Grid dibatasi 500 kolom dan
+200 baris window ditambah maksimum 5 baris status.
+
+Tiket browser sekali pakai berlaku 30 detik; viewer maksimal 30 menit. Batas
+aktif: 8 global, 4 per pengguna, 4 per host. Input dan permintaan resize ditolak
+server; tmux juga di-attach dengan `read-only,ignore-size`. Output hanya transit,
+buffer terbatas, tanpa rekaman di database atau browser persistence.
 
 ## Menjalankan secara lokal
 
@@ -186,14 +231,15 @@ python3 scripts/tmux-spike.py
 ```
 
 Test mencakup batas jaringan, login, expiry/revoke, CSRF/Origin, default-deny ACL,
-validasi profil, audit atomik/redaksi, migrasi 001/002 naik/turun, WAL, permission
+validasi profil, audit atomik/redaksi, migrasi 001–003 naik/turun, WAL, permission
 file, host key mismatch, autentikasi SSH, tailnet-only dial, timeout/cancellation,
 output limit dan cache stale/revoke. Integrasi SSH memakai key/server protokol
 sementara dan tmux nyata pada socket test terpisah. CI memasang tmux di Linux.
 Spike juga membuat server tmux dengan socket sementara tersendiri,
 memeriksa klien read-only/ukuran/disconnect, lalu membersihkan server uji tersebut.
-Tidak menyambung ke session tmux Anda. Matriks Linux/macOS dan perangkat nyata
-masih diperlukan sebelum minimum versi tmux ditetapkan.
+Tidak menyambung ke session tmux Anda. Viewer eksperimental mensyaratkan tmux
+3.4+; matriks versi/OS yang lebih luas dan perangkat nyata tetap diperlukan
+untuk dukungan rilis P0.
 
 CI memeriksa format, analisis Go, TypeScript, race tests, build web, dan build
 binary Linux tanpa CGO. Kontrak subset API ada di [docs/api-v1.md](docs/api-v1.md).

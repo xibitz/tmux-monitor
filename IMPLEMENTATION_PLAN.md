@@ -15,12 +15,12 @@ pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus
 |---|---|---|
 | T00 | DONE | Struktur Go/React, build, CI, konfigurasi contoh, migrasi 001 naik/turun, health. CI Linux dan uji lokal lulus. |
 | T01 | TODO | Matriks host Linux/Agent dan HP Android/iOS nyata belum disiapkan. |
-| T02 | PARTIAL | Spike tmux 3.8 macOS dan ADR 0001 tersedia; matriks versi, minimum versi, output burst dan ukuran tanpa desktop belum tuntas. |
+| T02 | PARTIAL | Spike tmux 3.8 macOS: manual sizing tanpa desktop/dua window/PTY resize/detach lulus; minimum 3.4 enforced untuk viewer. Matriks versi/perangkat luas dan control mode belum tuntas. |
 | T03 | PARTIAL | Login/ACL/CSRF/Origin/audit dan localhost-only diuji; live Serve/Grants negative tests belum. |
 | T10 | DONE | Key store/CLI configure-revoke, pin dan algoritme host key, tailnet address guard, bounded probe/API/UI; uji lokal dan CI Linux lulus. Uji tailnet nyata tetap T01/T03. |
 | T11 | DONE | Parser/epoch/revision, SSH snapshot, cache stale/revoke dan UI; uji tmux nyata terisolasi di macOS serta CI Linux lulus (empty/rename/split/kill/restart). |
-| T12 | TODO | PTY SSH, WebSocket, xterm.js, read-only/interactive, bounded buffers. |
-| T13 | TODO | Reconnect, status SSH, no replay dan error taxonomy terminal. |
+| T12 | PARTIAL | Viewer read-only eksperimental default disabled: sizing manual, PTY SSH, one-use ticket/WS, framing/buffer/audit, xterm.js, revoke/detach/shutdown tests. Interactive/device/access gates tetap terbuka. |
+| T13 | PARTIAL | Buka ulang manual/new ticket/reset read-only, no replay, alasan penutupan/revoke tersedia dan browser fixture lulus. Network switch/hub restart/perangkat nyata tetap terbuka. |
 | T20 | TODO | Mutasi session dengan epoch/revision, idempotency, konfirmasi/audit. |
 | T21 | TODO | Mutasi window/pane, snapshot pane dan suite dua transport. |
 | T22 | TODO | Enrollment/revoke Agent, credential, handshake/generation dan RPC. |
@@ -56,7 +56,7 @@ pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus
 - [x] Checkpoint: format/vet/TypeScript/race/build/CI; update memory dan status.
 
 Bukti kode checkpoint `33466f0`: [CI Linux sukses](https://github.com/xibitz/tmux-monitor/actions/runs/42206312482).
-T12 adalah task implementasi berikutnya; gate ukuran/akses T02/T03 tetap harus
+Lengkapi T12 interactive berikutnya; gate versi/perangkat/akses T02/T03 tetap harus
 dipenuhi sebelum terminal dipakai pada host nyata. T10/T11 DONE tidak berarti M1
 atau rilis P0 sudah selesai.
 

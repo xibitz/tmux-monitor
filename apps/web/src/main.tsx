@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -37,6 +37,11 @@ import type {
   SSHMetadata,
 } from "./api";
 import "./styles.css";
+const TerminalViewer = lazy(() =>
+  import("./TerminalViewer").then((module) => ({
+    default: module.TerminalViewer,
+  })),
+);
 
 function App() {
   const [identity, setIdentity] = useState<Identity>();
@@ -625,11 +630,11 @@ function Dashboard({
                   <strong>Inventaris SSH sudah tersedia.</strong>
                   <p>
                     Siapkan key SSH dan host key terverifikasi melalui CLI
-                    lokal, lalu periksa koneksi di detail host. Agent dan
-                    terminal menyusul.
+                    lokal, lalu periksa koneksi di detail host. Viewer read-only
+                    eksperimental dapat diaktifkan operator. Agent menyusul.
                   </p>
                 </div>
-                <span className="subtle-tag">M1 / SSH INVENTORY</span>
+                <span className="subtle-tag">SSH WORKSPACE</span>
               </div>
             </>
           ) : (
@@ -783,14 +788,19 @@ function Modal({
   title,
   onClose,
   children,
+  wide = false,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  wide?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+  useEffect(() => {
+    ref.current?.scrollTo(0, 0);
+  }, [wide]);
   useEffect(() => {
     const dialog = ref.current!;
     dialog.showModal();
@@ -805,7 +815,11 @@ function Modal({
     };
   }, []);
   return (
-    <dialog ref={ref} className="modal" aria-labelledby="modal-title">
+    <dialog
+      ref={ref}
+      className={wide ? "modal terminal-modal" : "modal"}
+      aria-labelledby="modal-title"
+    >
       <div className="modal-header">
         <h2 id="modal-title">{title}</h2>
         <button
@@ -1095,6 +1109,22 @@ function HostDetails({
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [metadataAttempt, setMetadataAttempt] = useState(0);
   const [inventory, setInventory] = useState<Inventory>();
+  const [terminalEnabled, setTerminalEnabled] = useState(false);
+  const [terminalSession, setTerminalSession] = useState<{
+    id: string;
+    name: string;
+  }>();
+  useEffect(() => {
+    let active = true;
+    void api<{ enabled: boolean }>("/terminal/options")
+      .then((value) => {
+        if (active) setTerminalEnabled(value.enabled);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
   const [observationError, setObservationError] = useState("");
   const id = encodeURIComponent(host.id);
   useEffect(() => {
@@ -1167,12 +1197,24 @@ function HostDetails({
   return (
     <Modal
       title={confirm ? "Hapus profil host?" : host.label}
+      wide={!!terminalSession}
       onClose={() => {
         if (!busy) onClose();
       }}
     >
       {error && <ErrorNotice>{error}</ErrorNotice>}
-      {confirm ? (
+      {terminalSession && inventory ? (
+        <Suspense fallback={<p>Memuat viewer…</p>}>
+          <TerminalViewer
+            hostId={host.id}
+            hostLabel={host.label}
+            sessionId={terminalSession.id}
+            sessionName={terminalSession.name}
+            epoch={inventory.epoch}
+            onBack={() => setTerminalSession(undefined)}
+          />
+        </Suspense>
+      ) : confirm ? (
         <>
           <p className="modal-description">
             Profil <strong>{host.label}</strong> akan dihapus dari workspace.
@@ -1334,6 +1376,15 @@ function HostDetails({
                         <Terminal size={16} />
                         <strong>{session.name}</strong>
                         <code>{session.id}</code>
+                        {terminalEnabled && host.transport === "ssh" && (
+                          <button
+                            className="button secondary"
+                            disabled={inventory.stale || busy}
+                            onClick={() => setTerminalSession(session)}
+                          >
+                            Buka terminal read-only
+                          </button>
+                        )}
                       </div>
                       <ul>
                         {session.windows.map((window) => (
@@ -1373,8 +1424,9 @@ function HostDetails({
           <div className="info-notice">
             <Eye size={16} />
             <span>
-              Tahap ini hanya membaca inventaris. Terminal interaktif menyusul
-              pada T12; tidak ada session atau proses tmux yang diubah.
+              {terminalEnabled
+                ? "Viewer terminal tersedia dalam mode read-only. Input interaktif masih dalam pengembangan."
+                : "Viewer terminal belum diaktifkan oleh operator hub. Inventaris tetap dapat diperiksa."}
             </span>
           </div>
           <div className="modal-actions">

@@ -81,81 +81,17 @@ func (m *Manager) Snapshot(ctx context.Context, h Host, record Record) (tmux.Inv
 	defer func() { m.mu.Lock(); delete(m.busy, h.ID); m.mu.Unlock(); <-m.gate }()
 	ctx, cancel := context.WithTimeout(ctx, m.Timeout)
 	defer cancel()
-	if !m.Allowed[h.Address] {
-		return tmux.Inventory{}, fail("address_not_allowed")
-	}
 	command, err := tmux.SnapshotCommand(h.Socket)
 	if err != nil {
 		return tmux.Inventory{}, fail("inventory_invalid")
 	}
-	signer, hostKey, err := m.Store.Key(record)
+	client, _, err := m.connect(ctx, h, record)
 	if err != nil {
 		return tmux.Inventory{}, err
 	}
-	addresses, err := m.resolve(ctx, h.Address)
-	if err != nil {
-		return tmux.Inventory{}, networkError(ctx, err)
-	}
-	if len(addresses) == 0 || len(addresses) > 16 {
-		return tmux.Inventory{}, fail("connection_failed")
-	}
-	for _, ip := range addresses {
-		if !tailnetIP(ip) {
-			return tmux.Inventory{}, fail("address_not_tailnet")
-		}
-	}
-	// Dial the validated IP, not the DNS name again (avoids DNS rebinding).
-	var conn net.Conn
-	for _, ip := range addresses {
-		attempt, cancelAttempt := context.WithTimeout(ctx, 3*time.Second)
-		conn, err = m.dial(attempt, "tcp", net.JoinHostPort(ip.String(), strconv.Itoa(record.Port)))
-		cancelAttempt()
-		if err == nil {
-			break
-		}
-		if ctx.Err() != nil {
-			break
-		}
-	}
-	if err != nil {
-		return tmux.Inventory{}, networkError(ctx, err)
-	}
-	defer conn.Close()
-	deadline, _ := ctx.Deadline()
-	if err = conn.SetDeadline(deadline); err != nil {
-		return tmux.Inventory{}, fail("connection_failed")
-	}
-	var mismatch atomic.Bool
-	check := ssh.FixedHostKey(hostKey)
-	config := &ssh.ClientConfig{User: h.User, Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)}, HostKeyAlgorithms: hostAlgorithms(hostKey), HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
-		if err := check(hostname, remote, key); err != nil {
-			mismatch.Store(true)
-			return fail("host_key_mismatch")
-		}
-		return nil
-	}}
-	cc, chans, reqs, err := ssh.NewClientConn(conn, net.JoinHostPort(h.Address, strconv.Itoa(record.Port)), config)
-	if err != nil {
-		if mismatch.Load() {
-			return tmux.Inventory{}, fail("host_key_mismatch")
-		}
-		if strings.Contains(err.Error(), "unable to authenticate") {
-			return tmux.Inventory{}, fail("authentication_failed")
-		}
-		return tmux.Inventory{}, networkError(ctx, err)
-	}
-	client := ssh.NewClient(cc, chans, reqs)
 	defer client.Close()
-	// Cancel closes the transport even when the peer stops responding mid-command.
 	stop := context.AfterFunc(ctx, func() { _ = client.Close() })
 	defer stop()
-	identity, _, err := run(ctx, client, "LC_ALL=C id -un", 1024)
-	if err != nil {
-		return tmux.Inventory{}, err
-	}
-	if strings.TrimSpace(string(identity)) != h.User {
-		return tmux.Inventory{}, fail("os_user_mismatch")
-	}
 	versionBytes, _, err := run(ctx, client, "LC_ALL=C tmux -V", 1024)
 	if err != nil {
 		return tmux.Inventory{}, versionError(err)
@@ -187,6 +123,89 @@ func (m *Manager) Snapshot(ctx context.Context, h Host, record Record) (tmux.Inv
 		return inv, fail("inventory_invalid")
 	}
 	return inv, nil
+}
+
+// connect verifies the same pin/address/user policy for observation and PTY.
+func (m *Manager) connect(ctx context.Context, h Host, record Record) (*ssh.Client, net.Conn, error) {
+	if !m.Allowed[h.Address] {
+		return nil, nil, fail("address_not_allowed")
+	}
+	signer, hostKey, err := m.Store.Key(record)
+	if err != nil {
+		return nil, nil, err
+	}
+	addresses, err := m.resolve(ctx, h.Address)
+	if err != nil {
+		return nil, nil, networkError(ctx, err)
+	}
+	if len(addresses) == 0 || len(addresses) > 16 {
+		return nil, nil, fail("connection_failed")
+	}
+	for _, ip := range addresses {
+		if !tailnetIP(ip) {
+			return nil, nil, fail("address_not_tailnet")
+		}
+	}
+	// Dial the validated IP, not the DNS name again (avoids DNS rebinding).
+	var conn net.Conn
+	for _, ip := range addresses {
+		attempt, cancelAttempt := context.WithTimeout(ctx, 3*time.Second)
+		conn, err = m.dial(attempt, "tcp", net.JoinHostPort(ip.String(), strconv.Itoa(record.Port)))
+		cancelAttempt()
+		if err == nil {
+			break
+		}
+		if ctx.Err() != nil {
+			break
+		}
+	}
+	if err != nil {
+		return nil, nil, networkError(ctx, err)
+	}
+	ok := false
+	defer func() {
+		if !ok {
+			_ = conn.Close()
+		}
+	}()
+	stopDial := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stopDial()
+	deadline, _ := ctx.Deadline()
+	if err = conn.SetDeadline(deadline); err != nil {
+		return nil, nil, fail("connection_failed")
+	}
+	var mismatch atomic.Bool
+	check := ssh.FixedHostKey(hostKey)
+	config := &ssh.ClientConfig{User: h.User, Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)}, HostKeyAlgorithms: hostAlgorithms(hostKey), HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		if err := check(hostname, remote, key); err != nil {
+			mismatch.Store(true)
+			return fail("host_key_mismatch")
+		}
+		return nil
+	}}
+	cc, chans, reqs, err := ssh.NewClientConn(conn, net.JoinHostPort(h.Address, strconv.Itoa(record.Port)), config)
+	if err != nil {
+		if mismatch.Load() {
+			return nil, nil, fail("host_key_mismatch")
+		}
+		if strings.Contains(err.Error(), "unable to authenticate") {
+			return nil, nil, fail("authentication_failed")
+		}
+		return nil, nil, networkError(ctx, err)
+	}
+	client := ssh.NewClient(cc, chans, reqs)
+	// Cancel closes the transport even when the peer stops responding mid-command.
+	stop := context.AfterFunc(ctx, func() { _ = client.Close() })
+	defer stop()
+	identity, _, err := run(ctx, client, "LC_ALL=C id -un", 1024)
+	if err != nil {
+		return nil, nil, err
+	}
+	if strings.TrimSpace(string(identity)) != h.User {
+		return nil, nil, fail("os_user_mismatch")
+	}
+	ok = true
+	return client, conn, nil
 }
 
 func versionError(err error) error {

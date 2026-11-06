@@ -6,6 +6,7 @@ import os
 import pathlib
 import pty
 import select
+import signal
 import struct
 import subprocess
 import tempfile
@@ -81,7 +82,36 @@ def main():
                     if b"%begin" in output and b"%end" in output:
                         break
             assert b"%begin" in output and b"%end" in output, output
-            print(json.dumps({"tmux": subprocess.check_output(["tmux", "-V"], text=True).strip(), "os": os.uname().sysname, "desktopSize": original, "mobileSize": "40x20", "sizePreserved": True, "readOnlyBlocksNewWindow": True, "sessionSurvivesClientDisconnect": True, "epochFieldsPresent": True, "basicControlBlocks": True}, indent=2))
+            control.terminate()
+            control.wait(timeout=3)
+            desktop.terminate()
+            desktop.wait(timeout=3)
+            wait_for(lambda: not command("list-clients", "-F", "#{client_name}"))
+            # Conservative policy for the first viewer: never alter options on
+            # a real host. Here, test manual sizing on our disposable server.
+            command("set-option", "-gw", "window-size", "manual")
+            command("set-option", "-w", "-t", "probe", "window-size", "manual")
+            command("resize-window", "-t", "probe", "-x", "120", "-y", "39")
+            command("new-window", "-d", "-t", "probe", "-n", "second", "sleep 300")
+            command("resize-window", "-t", "probe:1", "-x", "90", "-y", "30")
+
+            def sizes():
+                return command("list-windows", "-t", "probe", "-F", "#{window_id}|#{window_width}|#{window_height}|#{window-size}")
+
+            before = sizes()
+            standalone, standalone_fd = attach(40, 20, "read-only,ignore-size")
+            wait_for(lambda: len(command("list-clients", "-F", "#{client_name}").splitlines()) == 1)
+            assert sizes() == before, (before, sizes())
+            fcntl.ioctl(standalone_fd, termios.TIOCSWINSZ, struct.pack("HHHH", 10, 25, 0, 0))
+            os.kill(standalone.pid, signal.SIGWINCH)
+            command("select-window", "-t", "probe:1")
+            time.sleep(0.2)
+            assert sizes() == before, (before, sizes())
+            standalone.terminate()
+            standalone.wait(timeout=3)
+            assert sizes() == before, (before, sizes())
+            assert subprocess.run(prefix + ["has-session", "-t", "probe"], capture_output=True).returncode == 0
+            print(json.dumps({"tmux": subprocess.check_output(["tmux", "-V"], text=True).strip(), "os": os.uname().sysname, "desktopSize": original, "mobileSize": "40x20", "sizePreserved": True, "readOnlyBlocksNewWindow": True, "sessionSurvivesClientDisconnect": True, "epochFieldsPresent": True, "basicControlBlocks": True, "manualSizingWithoutDesktop": True, "mixedWindowSizesPreserved": True, "ptyResizePreservesManualWindows": True}, indent=2))
         finally:
             for process in processes:
                 if process.poll() is None:

@@ -19,7 +19,7 @@ import (
 //go:embed migrations/*.sql
 var migrations embed.FS
 
-const LatestVersion = 2
+const LatestVersion = 3
 
 func Open(dataDir string) (*sql.DB, error) {
 	if err := os.MkdirAll(dataDir, 0700); err != nil {

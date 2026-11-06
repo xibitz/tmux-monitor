@@ -30,23 +30,36 @@ const (
 	requestKey contextKey = iota
 	userKey
 	tokenKey
+	nonceKey
 )
 
 type Server struct {
-	db            *sql.DB
-	cfg           config.Config
-	assets        fs.FS
-	log           *slog.Logger
-	router        http.Handler
-	loginMu       sync.Mutex
-	loginWindow   time.Time
-	loginAttempts int
-	ssh           sshObserver
+	db               *sql.DB
+	cfg              config.Config
+	assets           fs.FS
+	log              *slog.Logger
+	router           http.Handler
+	loginMu          sync.Mutex
+	loginWindow      time.Time
+	loginAttempts    int
+	ssh              sshObserver
+	terminal         terminalOpener
+	viewMu           sync.Mutex
+	tickets          map[string]terminalTicket
+	viewers          map[string]terminalTicket
+	terminalInterval time.Duration
+	terminalRoot     context.Context
+	stopTerminals    context.CancelFunc
+	terminalWG       sync.WaitGroup
+	terminalClosing  bool
 }
 
 func New(db *sql.DB, cfg config.Config, assets fs.FS, logger *slog.Logger) *Server {
-	s := &Server{db: db, cfg: cfg, assets: assets, log: logger}
-	s.ssh = sshconnector.New(s.credentials(), cfg.AllowedSSHHosts)
+	s := &Server{db: db, cfg: cfg, assets: assets, log: logger, tickets: map[string]terminalTicket{}, viewers: map[string]terminalTicket{}, terminalInterval: 2 * time.Second}
+	s.terminalRoot, s.stopTerminals = context.WithCancel(context.Background())
+	manager := sshconnector.New(s.credentials(), cfg.AllowedSSHHosts)
+	s.ssh = manager
+	s.terminal = manager
 	api := http.NewServeMux()
 	api.HandleFunc("POST /api/v1/auth/login", s.login)
 	api.HandleFunc("POST /api/v1/auth/logout", s.logout)
@@ -60,12 +73,15 @@ func New(db *sql.DB, cfg config.Config, assets fs.FS, logger *slog.Logger) *Serv
 	api.HandleFunc("DELETE /api/v1/hosts/{id}", s.deleteHost)
 	api.HandleFunc("GET /api/v1/hosts/{id}/inventory", s.inventory)
 	api.HandleFunc("GET /api/v1/audit", s.listAudit)
+	api.HandleFunc("GET /api/v1/terminal/options", s.terminalOptions)
+	api.HandleFunc("POST /api/v1/terminal/tickets", s.terminalTicket)
 	api.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, 404, "not_found", "Endpoint tidak ditemukan.")
 	})
 	root := http.NewServeMux()
 	root.HandleFunc("GET /healthz", s.health)
 	root.Handle("/api/", s.authorize(api))
+	root.Handle("GET /ws/v1/terminal", s.authorize(http.HandlerFunc(s.terminalUpgrade)))
 	root.Handle("/ws/", s.authorize(api))
 	root.HandleFunc("/", s.static)
 	s.router = root
@@ -75,6 +91,8 @@ func New(db *sql.DB, cfg config.Config, assets fs.FS, logger *slog.Logger) *Serv
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id := storage.ID("req_")
 	r = r.WithContext(context.WithValue(r.Context(), requestKey, id))
+	nonce := storage.ID("")
+	r = r.WithContext(context.WithValue(r.Context(), nonceKey, nonce))
 	w.Header().Set("X-Request-ID", id)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "no-referrer")
@@ -84,6 +102,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.Development {
 		csp = strings.Replace(csp, "style-src 'self'", "style-src 'self' 'unsafe-inline'", 1)
 		csp = strings.Replace(csp, "connect-src 'self'", "connect-src 'self' "+strings.Replace(s.cfg.Origin, "http://", "ws://", 1), 1)
+	} else {
+		csp = strings.Replace(csp, "style-src 'self'", "style-src 'self' 'nonce-"+nonce+"'", 1)
+		csp = strings.Replace(csp, "connect-src 'self'", "connect-src 'self' "+strings.Replace(s.cfg.Origin, "https://", "wss://", 1), 1)
 	}
 	w.Header().Set("Content-Security-Policy", csp)
 	if !s.cfg.Development {
@@ -134,7 +155,7 @@ func (s *Server) authorize(next http.Handler) http.Handler {
 				s.fail(w, r, 403, "forbidden", "Origin tidak diizinkan.")
 				return
 			}
-			if subtle.ConstantTimeCompare([]byte(r.Header.Get("X-CSRF-Token")), []byte(identity.CSRF(cookie.Value))) != 1 {
+			if !(r.Method == http.MethodGet && r.URL.Path == "/ws/v1/terminal") && subtle.ConstantTimeCompare([]byte(r.Header.Get("X-CSRF-Token")), []byte(identity.CSRF(cookie.Value))) != 1 {
 				s.fail(w, r, 403, "forbidden", "Token CSRF tidak berlaku.")
 				return
 			}
@@ -292,6 +313,7 @@ type AuditEvent struct {
 	Result    string `json:"result"`
 	RequestID string `json:"requestId"`
 	At        string `json:"at"`
+	Target    string `json:"target,omitempty"`
 }
 
 func (s *Server) audit(r *http.Request, actor, action, host, result string) error {
@@ -325,7 +347,7 @@ func (s *Server) listAudit(w http.ResponseWriter, r *http.Request) {
 		}
 		before = n
 	}
-	rows, err := s.db.QueryContext(r.Context(), "SELECT id,actor,action,host_id,result,request_id,at FROM audit_events WHERE id<? ORDER BY id DESC LIMIT ?", before, limit+1)
+	rows, err := s.db.QueryContext(r.Context(), "SELECT id,actor,action,host_id,result,request_id,at,target FROM audit_events WHERE id<? ORDER BY id DESC LIMIT ?", before, limit+1)
 	if err != nil {
 		s.internal(w, r)
 		return
@@ -334,7 +356,7 @@ func (s *Server) listAudit(w http.ResponseWriter, r *http.Request) {
 	events := []AuditEvent{}
 	for rows.Next() {
 		var event AuditEvent
-		if err = rows.Scan(&event.ID, &event.Actor, &event.Action, &event.HostID, &event.Result, &event.RequestID, &event.At); err != nil {
+		if err = rows.Scan(&event.ID, &event.Actor, &event.Action, &event.HostID, &event.Result, &event.RequestID, &event.At, &event.Target); err != nil {
 			s.internal(w, r)
 			return
 		}
@@ -389,6 +411,7 @@ func (s *Server) static(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		body = bytes.ReplaceAll(body, []byte("__CSP_NONCE__"), []byte(r.Context().Value(nonceKey).(string)))
 		http.ServeContent(w, r, "index.html", time.Time{}, bytes.NewReader(body))
 		return
 	}

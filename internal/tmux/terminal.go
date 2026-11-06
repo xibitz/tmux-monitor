@@ -1,0 +1,107 @@
+package tmux
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
+
+// TerminalPolicy is freshly read from tmux, never from the inventory cache.
+type TerminalPolicy struct {
+	Cols      int
+	Rows      int
+	Signature string
+}
+
+func TerminalPolicyCommand(socket, session string) (string, error) {
+	if !socketName.MatchString(socket) || !validID(session, '$') {
+		return "", ErrInvalid
+	}
+	args := []string{"tmux", "-L", socket, "display-message", "-p", "F|#{pid}|#{start_time}|#{q:socket_path}|#{version}", ";",
+		"show-options", "-gwv", "window-size", ";",
+		"display-message", "-p", "-t", session + ":", "T|#{session_id}|#{status}|#{window_id}|#{window_width}|#{window_height}", ";",
+		"list-windows", "-t", session, "-F", "W|#{window_id}|#{window-size}|#{window_width}|#{window_height}", ";",
+		"display-message", "-p", "F|#{pid}|#{start_time}|#{q:socket_path}|#{version}"}
+	for i := range args {
+		args[i] = ShellQuote(args[i])
+	}
+	return "LC_ALL=C " + strings.Join(args, " "), nil
+}
+
+func AttachCommand(socket, session string) (string, error) {
+	if !socketName.MatchString(socket) || !validID(session, '$') {
+		return "", ErrInvalid
+	}
+	args := []string{"tmux", "-L", socket, "attach-session", "-f", "read-only,ignore-size", "-t", session}
+	for i := range args {
+		args[i] = ShellQuote(args[i])
+	}
+	return "exec env LC_ALL=C " + strings.Join(args, " "), nil
+}
+
+func ParseTerminalPolicy(host, socket, session, epoch string, output []byte) (TerminalPolicy, error) {
+	var policy TerminalPolicy
+	if len(output) > MaxOutput {
+		return policy, ErrInvalid
+	}
+	lines := strings.Split(strings.TrimSuffix(string(output), "\n"), "\n")
+	if len(lines) < 5 || len(lines) > 1000 {
+		return policy, ErrInvalid
+	}
+	first := fingerprintFields(lines[0])
+	if !validFingerprint(first) || lines[0] != lines[len(lines)-1] || digest("e_", host, socket, lines[0]) != epoch {
+		return policy, ErrChanged
+	}
+	var major, minor int
+	if _, err := fmt.Sscanf(first[4], "%d.%d", &major, &minor); err != nil || major < 3 || major == 3 && minor < 4 {
+		return policy, ErrInvalid
+	}
+	if lines[1] != "manual" {
+		return policy, ErrInvalid
+	}
+	target := strings.Split(lines[2], "|")
+	if len(target) != 6 || target[0] != "T" || target[1] != session || !validID(target[3], '@') {
+		return policy, ErrInvalid
+	}
+	status := 0
+	switch target[2] {
+	case "on":
+		status = 1
+	case "off":
+	default:
+		n, err := strconv.Atoi(target[2])
+		if err != nil || n < 0 || n > 5 {
+			return policy, ErrInvalid
+		}
+		status = n
+	}
+	cols, err := strconv.Atoi(target[4])
+	if err != nil || cols < 2 || cols > 500 {
+		return policy, ErrInvalid
+	}
+	height, err := strconv.Atoi(target[5])
+	if err != nil || height < 2 || height > 200 {
+		return policy, ErrInvalid
+	}
+	seen, active := map[string]bool{}, false
+	for _, line := range lines[3 : len(lines)-1] {
+		w := strings.Split(line, "|")
+		if len(w) != 5 || w[0] != "W" || !validID(w[1], '@') || w[2] != "manual" || seen[w[1]] {
+			return policy, ErrInvalid
+		}
+		seen[w[1]] = true
+		for _, size := range w[3:] {
+			n, e := strconv.Atoi(size)
+			if e != nil || n < 2 || n > 500 {
+				return policy, ErrInvalid
+			}
+		}
+		if w[1] == target[3] {
+			active = w[3] == target[4] && w[4] == target[5]
+		}
+	}
+	if !active {
+		return policy, ErrInvalid
+	}
+	return TerminalPolicy{Cols: cols, Rows: height + status, Signature: digest("p_", lines...)}, nil
+}

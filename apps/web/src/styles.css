@@ -1576,3 +1576,46 @@ p {
     transform: none !important;
   }
 }
+.terminal-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.modal.terminal-modal {
+  width: min(1080px, calc(100vw - 24px));
+}
+.terminal-context strong {
+  overflow-wrap: anywhere;
+}
+.viewer-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  color: var(--accent);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.viewer-status {
+  font-size: 13px;
+  line-height: 1.6;
+}
+.terminal-scroll {
+  max-width: 100%;
+  max-height: 60vh;
+  overflow: auto;
+  background: #101813;
+  border-radius: 8px;
+  padding: 10px;
+}
+.terminal-scroll .xterm {
+  width: max-content;
+}
+.session-heading {
+  flex-wrap: wrap;
+}
+.session-heading .button {
+  margin-left: auto;
+  font-size: 12px;
+}

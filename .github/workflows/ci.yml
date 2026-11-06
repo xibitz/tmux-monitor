@@ -30,6 +30,8 @@ jobs:
           sudo apt-get install -y tmux
       - run: make check
       - run: make test
+      - name: Verify isolated multi-client tmux sizing
+        run: python3 scripts/tmux-spike.py
       - run: make build
       - name: Verify static Linux build
         run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o bin/hub-linux-amd64 ./cmd/hub

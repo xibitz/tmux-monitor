@@ -14,6 +14,7 @@ type Config struct {
 	DataDir         string
 	Origin          string
 	Development     bool
+	TerminalEnabled bool
 	AllowedSSHHosts map[string]bool
 }
 
@@ -23,6 +24,10 @@ func Load() (Config, error) {
 	c.Development, err = strconv.ParseBool(env("TMUX_MONITOR_DEV", "false"))
 	if err != nil {
 		return c, fmt.Errorf("TMUX_MONITOR_DEV must be true or false")
+	}
+	c.TerminalEnabled, err = strconv.ParseBool(env("TMUX_MONITOR_TERMINAL_ENABLED", "false"))
+	if err != nil {
+		return c, fmt.Errorf("TMUX_MONITOR_TERMINAL_ENABLED must be true or false")
 	}
 	for _, host := range strings.Split(os.Getenv("TMUX_MONITOR_ALLOWED_SSH_HOSTS"), ",") {
 		if host = strings.TrimSpace(strings.ToLower(host)); host != "" {

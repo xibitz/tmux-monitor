@@ -15,7 +15,7 @@ func TestMigrationRollbackReapplyAndPermissions(t *testing.T) {
 	}
 	defer db.Close()
 	ctx := context.Background()
-	for _, version := range []int{1, 2, 2, 1, 0, 2} {
+	for _, version := range []int{1, 2, 3, 3, 2, 1, 0, 3} {
 		if err := Migrate(ctx, db, version); err != nil {
 			t.Fatal(err)
 		}
@@ -52,6 +52,34 @@ func TestMigrationRollbackReapplyAndPermissions(t *testing.T) {
 	}
 	if err := Migrate(ctx, db, 1); err == nil {
 		t.Fatal("accepted newer database schema")
+	}
+}
+
+func TestTerminalAuditMigrationPreservesExistingAudit(t *testing.T) {
+	db, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	if err = Migrate(ctx, db, 2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec("INSERT INTO audit_events(actor,action,result,request_id,at) VALUES ('admin','existing','success','req_test',?)", Now()); err != nil {
+		t.Fatal(err)
+	}
+	for _, version := range []int{3, 2, 3} {
+		if err = Migrate(ctx, db, version); err != nil {
+			t.Fatal(err)
+		}
+		var action string
+		if err = db.QueryRow("SELECT action FROM audit_events").Scan(&action); err != nil || action != "existing" {
+			t.Fatal("audit history lost")
+		}
+	}
+	var target string
+	if err = db.QueryRow("SELECT target FROM audit_events").Scan(&target); err != nil || target != "" {
+		t.Fatal("legacy audit default invalid")
 	}
 }
 

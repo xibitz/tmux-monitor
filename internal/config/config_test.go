@@ -2,6 +2,25 @@ package config
 
 import "testing"
 
+func TestTerminalRequiresExplicitOptIn(t *testing.T) {
+	t.Setenv("TMUX_MONITOR_ORIGIN", "https://hub.example.ts.net")
+	t.Setenv("TMUX_MONITOR_DEV", "false")
+	t.Setenv("TMUX_MONITOR_TERMINAL_ENABLED", "")
+	c, err := Load()
+	if err != nil || c.TerminalEnabled {
+		t.Fatal("terminal must default off")
+	}
+	t.Setenv("TMUX_MONITOR_TERMINAL_ENABLED", "true")
+	c, err = Load()
+	if err != nil || !c.TerminalEnabled {
+		t.Fatal("explicit opt-in failed")
+	}
+	t.Setenv("TMUX_MONITOR_TERMINAL_ENABLED", "invalid")
+	if _, err = Load(); err == nil {
+		t.Fatal("invalid feature setting accepted")
+	}
+}
+
 func TestNetworkBoundary(t *testing.T) {
 	for _, tc := range []struct {
 		name, listen, origin string

@@ -10,16 +10,17 @@
     "format": "prettier --write src index.html vite.config.ts tsconfig.json package.json"
   },
   "dependencies": {
+    "@xterm/xterm": "^6.0.0",
+    "lucide-react": "^0.468.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "lucide-react": "^0.468.0"
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.0.0",
-    "typescript": "~5.9.3",
     "prettier": "^3.6.2",
+    "typescript": "~5.9.3",
     "vite": "^7.2.0"
   },
   "engines": {
