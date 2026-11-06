@@ -5,6 +5,7 @@ setup:
 	go mod download
 
 web:
+	find internal/webassets/dist -mindepth 1 ! -name .gitkeep -delete
 	npm run build --prefix apps/web
 
 build: web

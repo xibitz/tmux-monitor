@@ -5,15 +5,17 @@ Rancangan produk ada di [PRD](PRD.md) dan [rencana implementasi](IMPLEMENTATION_
 
 ## Status implementasi
 
-Fondasi pertama sudah mencakup hub Go dengan listener localhost, SQLite WAL dan
-migrasi bernomor, bootstrap admin, login Argon2id, cookie sesi dan revoke,
-pemeriksaan Origin/CSRF, izin per host, registri profil, audit, serta UI React
-yang responsif. Asset web disertakan dalam binary hub setelah build.
+Hub Go dengan SQLite, login/ACL/CSRF, registri host, audit dan UI responsif tersedia.
+Konektor SSH sekarang mendukung key khusus hub, pin host key, probe serta inventaris
+session/window/pane tmux dengan epoch dan cache stale. Asset web disertakan dalam
+binary hub setelah build. Kredensial dipasang melalui CLI lokal, bukan formulir.
 
-**Konektor SSH/Agent dan terminal belum diimplementasikan.** Profil yang dibuat
-belum dianggap online; inventaris mengembalikan `transport_unavailable`.
-Belum ada service worker, control mode, pairing agent, atau notifikasi.
-Ini hasil awal M0, belum memenuhi gate rilis P0 untuk terminal nyata.
+**Terminal PTY/WebSocket dan konektor Agent belum tersedia.** SSH saat ini hanya
+membaca inventaris; tidak attach atau memodifikasi session. Belum ada service
+worker, control mode, pairing agent, atau notifikasi. Gate rilis P0 belum lulus.
+
+Agent berikutnya mulai dari [MEMORY.md](MEMORY.md). Status setiap task dan gate
+berada di [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
 ## Menjalankan secara lokal
 
@@ -38,6 +40,9 @@ Mode pengembangan dengan hot reload, setelah bootstrap:
 
 ```sh
 # Terminal pertama
+set -a
+source .env
+set +a
 make dev
 # Terminal kedua
 npm run dev --prefix apps/web
@@ -53,8 +58,8 @@ password miliknya sendiri.
 Variabel tersedia di [.env.example](.env.example); hub tidak memuat `.env`
 secara otomatis. `TMUX_MONITOR_DATA_DIR` default `.data` dan menyimpan SQLite.
 Direktori menggunakan permission `0700`, database `0600`. Direktori ini diabaikan Git.
-Alamat SSH harus sama persis dengan allowlist admin. Pengaturan ini baru menyimpan
-profil; koneksi SSH dan verifikasi host key menyusul pada M1.
+Alamat SSH harus sama persis dengan allowlist admin. Saat dipakai, semua IP hasil
+resolusi harus berada di ruang alamat Tailscale; localhost/LAN/publik ditolak.
 
 Contoh produksi setelah login/konfigurasi diverifikasi di lingkungan uji:
 
@@ -93,6 +98,63 @@ DNS dinormalisasi. File `.env`/`.env.example` tidak dibaca otomatis; menulis nil
 di sana saja belum mengubah konfigurasi proses. Muat ulang halaman/formulir
 setelah hub dimulai ulang agar saran alamat diperbarui.
 
+## Menyiapkan koneksi SSH
+
+1. Buat profil SSH melalui aplikasi dengan alamat tailnet, akun OS pemilik tmux,
+   dan socket yang benar. Buka detailnya untuk melihat ID profil dan petunjuk CLI.
+2. Siapkan private key khusus hub, tanpa passphrase, dengan permission `0600`.
+   Public key pasang pada `authorized_keys` akun OS yang sesuai. Key terenkripsi,
+   ssh-agent dan login password belum didukung pada irisan ini.
+3. Ambil **public host key** melalui kanal tepercaya (misalnya console host),
+   serta catat fingerprint SHA256-nya secara independen. Di console host:
+
+   ```sh
+   ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256
+   ```
+
+   Salin file public key tersebut ke hub. `ssh-keyscan` saja tidak membuktikan
+   identitas host; CLI tidak melakukan trust-on-first-use dari hasil scan jaringan.
+4. Hentikan backend lama sebelum upgrade binary/skema, buat backup konsisten data
+   penting, jalankan `make build`, lalu muat environment yang menunjuk direktori
+   data hub yang sama. Konfigurasikan profil (ganti placeholder berikut):
+
+   ```sh
+   ./bin/hub ssh-configure \
+     --host-id h_ID_DARI_DETAIL \
+     --key-file /path/to/dedicated-key \
+     --host-key-file /path/to/verified-host.pub \
+     --expected-fingerprint SHA256:FINGERPRINT_TERVERIFIKASI \
+     --port 22
+   ```
+
+   CLI menyalin private key ke `.data/secrets/ssh/` (`0700`/`0600`) dan hanya
+   menyimpan reference serta public pin di SQLite. Perintah ini tidak membuka
+   koneksi SSH. Gunakan `TMUX_MONITOR_DATA_DIR` yang sama jika bukan `.data`.
+5. Jalankan kembali backend, buka detail host, klik muat ulang konfigurasi SSH,
+   lalu **Periksa koneksi dan inventaris**. Hasil memuat timestamp; kegagalan
+   berikutnya mempertahankan snapshot terakhir dengan label stale. Tanpa server
+   tmux aktif, SSH tetap online dengan daftar session kosong.
+
+Mencabut konfigurasi lokal:
+
+```sh
+./bin/hub ssh-revoke --host-id h_ID_DARI_DETAIL
+```
+
+Ini mencabut penggunaan key di hub. Untuk mencabut key pada host, hapus public key
+terkait dari `authorized_keys` melalui administrasi host.
+
+Rotasi dilakukan dengan `ssh-configure` kembali dan fingerprint terverifikasi.
+Rotasi/revoke menghapus cache lama dan menonaktifkan reference sebelumnya.
+Host key yang berubah ditolak sampai admin memasang pin baru secara eksplisit.
+Jangan menggunakan data stale untuk menyimpulkan session/proses telah berhenti.
+
+Observasi dibatasi 10 detik, maksimum empat request global dan satu per host,
+stdout 1 MiB serta stderr 16 KiB per command. Tidak ada raw-shell API, command
+input, attach PTY atau pemutaran ulang input pada tahap ini. Jika penghapusan
+file secret gagal setelah revoke/rotasi, reference tetap nonaktif; periksa dan
+bersihkan file yatim saat maintenance dengan hub berhenti.
+
 ## Pemeriksaan
 
 ```sh
@@ -103,8 +165,11 @@ python3 scripts/tmux-spike.py
 ```
 
 Test mencakup batas jaringan, login, expiry/revoke, CSRF/Origin, default-deny ACL,
-validasi profil, audit atomik/redaksi, migrasi naik/turun, WAL, permission file,
-dan batas request. Spike membuat server tmux dengan socket sementara tersendiri,
+validasi profil, audit atomik/redaksi, migrasi 001/002 naik/turun, WAL, permission
+file, host key mismatch, autentikasi SSH, tailnet-only dial, timeout/cancellation,
+output limit dan cache stale/revoke. Integrasi SSH memakai key/server protokol
+sementara dan tmux nyata pada socket test terpisah. CI memasang tmux di Linux.
+Spike juga membuat server tmux dengan socket sementara tersendiri,
 memeriksa klien read-only/ukuran/disconnect, lalu membersihkan server uji tersebut.
 Tidak menyambung ke session tmux Anda. Matriks Linux/macOS dan perangkat nyata
 masih diperlukan sebelum minimum versi tmux ditetapkan.
@@ -115,7 +180,7 @@ binary Linux tanpa CGO. Kontrak subset API ada di [docs/api-v1.md](docs/api-v1.m
 ## Migrasi dan rollback
 
 Hub menjalankan upgrade saat startup dan menolak database dari versi binary lebih
-baru. Perintah `hub migrate --to 1` menjalankan upgrade tanpa server HTTP.
+baru. Perintah `hub migrate --to 2` menjalankan upgrade tanpa server HTTP.
 Rollback fondasi ke versi 0 **menghapus seluruh tabel aplikasi** dan memerlukan
 `--allow-data-loss`; jangan jalankan pada data penting. Buat backup konsisten dulu
 saat hub dihentikan, atau gunakan fasilitas SQLite backup. Test rollback memakai
@@ -123,6 +188,6 @@ database sementara. Runbook backup/restore produksi lengkap adalah pekerjaan M3.
 
 ## Tahap berikutnya
 
-M1 menghubungkan profil SSH dengan secret reference dan host key terverifikasi,
-melakukan probe kemampuan/inventaris, lalu membuka viewer PTY read-only.
-Interactive dan reconnect hanya diaktifkan setelah pengujian keselamatan lulus.
+T12 berikutnya menambahkan viewer PTY read-only setelah kebijakan ukuran tanpa
+desktop dan gate akses dipenuhi. Interactive dan reconnect hanya diaktifkan
+setelah pengujian keselamatan lulus. Lihat MEMORY.md untuk titik lanjut agent.

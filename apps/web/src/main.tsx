@@ -27,7 +27,15 @@ import {
   X,
 } from "lucide-react";
 import { api, APIError, configureSession } from "./api";
-import type { AuditEvent, Host, HostInput, HostOptions, Identity } from "./api";
+import type {
+  AuditEvent,
+  Host,
+  HostInput,
+  HostOptions,
+  Identity,
+  Inventory,
+  SSHMetadata,
+} from "./api";
 import "./styles.css";
 
 function App() {
@@ -480,14 +488,18 @@ function Dashboard({
                 <Stat
                   icon={<Globe2 size={19} />}
                   label="Koneksi terverifikasi"
-                  value="—"
-                  detail="Probe host belum tersedia"
+                  value={
+                    loading
+                      ? "—"
+                      : hosts.filter((host) => host.state === "ONLINE").length
+                  }
+                  detail="Pemeriksaan terakhir berhasil"
                 />
                 <Stat
                   icon={<Layers3 size={19} />}
                   label="Session tmux"
                   value="—"
-                  detail="Menunggu konektor host"
+                  detail="Lihat inventaris di detail host"
                 />
               </div>
               <div className="list-toolbar">
@@ -584,10 +596,7 @@ function Dashboard({
                         <span className="host-icon">
                           <Server size={22} />
                         </span>
-                        <span className="status-badge">
-                          <span />
-                          Belum terhubung
-                        </span>
+                        <HostBadge host={host} />
                       </div>
                       <h2>{host.label}</h2>
                       <p className="host-address">
@@ -599,7 +608,10 @@ function Dashboard({
                       </div>
                       <div className="host-card-bottom">
                         <span>
-                          <Clock3 size={14} /> Belum diperiksa
+                          <Clock3 size={14} />{" "}
+                          {host.observedAt
+                            ? formatTime(host.observedAt)
+                            : "Belum diperiksa"}
                         </span>
                         <ArrowRight size={16} />
                       </div>
@@ -610,13 +622,14 @@ function Dashboard({
               <div className="foundation-note">
                 <CircleHelp size={18} />
                 <div>
-                  <strong>Fondasi workspace sudah siap.</strong>
+                  <strong>Inventaris SSH sudah tersedia.</strong>
                   <p>
-                    Profil dan akses tersimpan. Koneksi SSH, Agent, dan terminal
-                    tersedia pada tahap implementasi berikutnya.
+                    Siapkan key SSH dan host key terverifikasi melalui CLI
+                    lokal, lalu periksa koneksi di detail host. Agent dan
+                    terminal menyusul.
                   </p>
                 </div>
-                <span className="subtle-tag">M0 / FOUNDATION</span>
+                <span className="subtle-tag">M1 / SSH INVENTORY</span>
               </div>
             </>
           ) : (
@@ -706,6 +719,12 @@ function Dashboard({
         <HostDetails
           host={selected}
           canDelete={identity.user.isAdmin}
+          onUpdated={(updated) => {
+            setSelected(updated);
+            setHosts((current) =>
+              current.map((host) => (host.id === updated.id ? updated : host)),
+            );
+          }}
           onClose={() => setSelected(undefined)}
           onDeleted={() => {
             setHosts((current) =>
@@ -751,6 +770,9 @@ function actionLabel(action: string) {
         "host.create": "Profil host ditambahkan",
         "host.update": "Profil host diubah",
         "host.delete": "Profil host dihapus",
+        "host.probe": "Pemeriksaan SSH dan inventaris",
+        "ssh.configure": "Konfigurasi SSH dipasang",
+        "ssh.revoke": "Konfigurasi SSH dicabut",
         "access.denied": "Permintaan akses ditolak",
       } as Record<string, string>
     )[action] ?? action
@@ -1023,28 +1045,122 @@ function HostForm({
     </Modal>
   );
 }
+function formatTime(value: string) {
+  return new Date(value).toLocaleString("id-ID", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+function HostBadge({ host }: { host: Host }) {
+  const online = host.state === "ONLINE" && !host.stale;
+  const label =
+    host.statusReason === "credentials_required"
+      ? "Siapkan SSH"
+      : host.statusReason === "connector_pending"
+        ? "Belum tersedia"
+        : online
+          ? "Terakhir terhubung"
+          : host.state === "ONLINE"
+            ? "Periksa ulang"
+            : host.state === "DEGRADED"
+              ? "Perlu diperiksa"
+              : "Belum terhubung";
+  return (
+    <span className={`status-badge ${online ? "verified" : ""}`}>
+      <span />
+      {label}
+    </span>
+  );
+}
 function HostDetails({
   host,
   canDelete,
   onClose,
   onDeleted,
+  onUpdated,
 }: {
   host: Host;
   canDelete: boolean;
   onClose: () => void;
   onDeleted: () => void;
+  onUpdated: (host: Host) => void;
 }) {
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [metadata, setMetadata] = useState<SSHMetadata>();
+  const [metadataLoading, setMetadataLoading] = useState(false);
+  const [metadataAttempt, setMetadataAttempt] = useState(0);
+  const [inventory, setInventory] = useState<Inventory>();
+  const [observationError, setObservationError] = useState("");
+  const id = encodeURIComponent(host.id);
+  useEffect(() => {
+    if (host.transport !== "ssh" || !canDelete) return;
+    let active = true;
+    setMetadataLoading(true);
+    api<SSHMetadata>(`/hosts/${encodeURIComponent(host.id)}/ssh`)
+      .then((value) => {
+        if (active) {
+          setMetadata(value);
+          setError("");
+        }
+      })
+      .catch((error: Error) => {
+        if (active) setError(error.message);
+      })
+      .finally(() => {
+        if (active) setMetadataLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [host.id, host.transport, canDelete, metadataAttempt]);
   async function remove() {
     setBusy(true);
     setError("");
     try {
-      await api(`/hosts/${encodeURIComponent(host.id)}`, "DELETE");
+      await api(`/hosts/${id}`, "DELETE");
       onDeleted();
     } catch (error) {
       setError((error as Error).message);
+      setBusy(false);
+    }
+  }
+  async function inspect() {
+    setBusy(true);
+    setObservationError("");
+    try {
+      if (canDelete) {
+        const result = await api<{ host: Host; inventory: Inventory }>(
+          `/hosts/${id}/probe`,
+          "POST",
+        );
+        setInventory(result.inventory);
+        onUpdated(result.host);
+      } else {
+        setInventory(await api<Inventory>(`/hosts/${id}/inventory`));
+        const result = await api<{ hosts: Host[] }>("/hosts");
+        const latest = result.hosts.find((value) => value.id === host.id);
+        if (latest) onUpdated(latest);
+      }
+    } catch (error) {
+      setObservationError((error as Error).message);
+      setInventory((current) =>
+        current
+          ? { ...current, stale: true, statusReason: "refresh_failed" }
+          : undefined,
+      );
+      try {
+        const result = await api<{ hosts: Host[] }>("/hosts");
+        const latest = result.hosts.find((value) => value.id === host.id);
+        if (latest) onUpdated(latest);
+      } catch {
+        /* The request error above remains visible. */
+      }
+    } finally {
       setBusy(false);
     }
   }
@@ -1084,11 +1200,12 @@ function HostDetails({
       ) : (
         <>
           <div className="detail-status">
-            <span className="status-badge">
-              <span />
-              Belum terhubung
-            </span>
-            <p>Koneksi dan inventaris tmux belum diperiksa.</p>
+            <HostBadge host={host} />
+            <p>
+              {host.observedAt
+                ? `Pemeriksaan terakhir: ${formatTime(host.observedAt)}. Status ini adalah hasil observasi terakhir.`
+                : "Koneksi dan inventaris tmux belum diperiksa."}
+            </p>
           </div>
           <dl className="detail-list">
             <dt>Transport</dt>
@@ -1102,24 +1219,180 @@ function HostDetails({
             <dt>Lingkungan</dt>
             <dd>{host.environment || "—"}</dd>
           </dl>
+          {host.transport === "ssh" ? (
+            <section className="ssh-panel" aria-label="Koneksi SSH">
+              <div className="panel-heading">
+                <h3>Koneksi SSH</h3>
+                {canDelete && (
+                  <button
+                    className="icon-button bordered"
+                    aria-label="Muat ulang konfigurasi SSH"
+                    disabled={busy || metadataLoading}
+                    onClick={() => setMetadataAttempt((current) => current + 1)}
+                  >
+                    <RefreshCw
+                      size={15}
+                      className={metadataLoading ? "spin" : ""}
+                    />
+                  </button>
+                )}
+              </div>
+              {metadataLoading ? (
+                <p className="panel-description" role="status">
+                  Memuat konfigurasi SSH…
+                </p>
+              ) : canDelete && metadata?.configured ? (
+                <div className="ssh-configured">
+                  <ShieldCheck size={17} />
+                  <div>
+                    <strong>
+                      Host key terverifikasi · port {metadata.port}
+                    </strong>
+                    <code>{metadata.fingerprint}</code>
+                  </div>
+                </div>
+              ) : canDelete && metadata ? (
+                <div className="ssh-setup">
+                  <p>
+                    Pasang key SSH khusus hub dan public host key yang telah
+                    diverifikasi melalui CLI lokal. Key tidak dikirim melalui
+                    formulir.
+                  </p>
+                  <pre>
+                    <code>{`./bin/hub ssh-configure \\
+  --host-id ${host.id} \\
+  --key-file /path/to/dedicated-key \\
+  --host-key-file /path/to/verified-host.pub \\
+  --expected-fingerprint SHA256:...`}</code>
+                  </pre>
+                  <p>
+                    Gunakan direktori data yang sama dengan hub. Setelah
+                    konfigurasi tersimpan, muat ulang konfigurasi SSH dengan
+                    tombol di atas.
+                  </p>
+                </div>
+              ) : null}
+              {observationError && (
+                <ErrorNotice>{observationError}</ErrorNotice>
+              )}
+              <button
+                className="button secondary full"
+                disabled={
+                  busy ||
+                  (canDelete && (!metadata?.configured || metadataLoading))
+                }
+                onClick={inspect}
+              >
+                {busy ? (
+                  <LoaderCircle size={16} className="spin" />
+                ) : (
+                  <RefreshCw size={16} />
+                )}
+                {canDelete
+                  ? "Periksa koneksi dan inventaris"
+                  : "Muat inventaris"}
+              </button>
+            </section>
+          ) : (
+            <div className="info-notice">
+              <CircleHelp size={17} />
+              <span>
+                Konektor Agent masih menunggu tahap implementasi berikutnya.
+                Tidak ada fallback otomatis ke SSH.
+              </span>
+            </div>
+          )}
+          {inventory && (
+            <section className="inventory-panel" aria-label="Inventaris tmux">
+              <div className="panel-heading">
+                <h3>Inventaris tmux</h3>
+                <span className="subtle-tag">
+                  tmux {inventory.capabilities.tmuxVersion}
+                </span>
+              </div>
+              <p className="panel-description">
+                Diambil {formatTime(inventory.observedAt)} ·{" "}
+                {inventory.sessions.length} session
+              </p>
+              {inventory.stale && (
+                <div className="error-notice" role="status">
+                  Pemeriksaan gagal ({inventory.statusReason}). Menampilkan
+                  inventaris terakhir; data ini sudah stale.
+                </div>
+              )}
+              {inventory.sessions.length === 0 ? (
+                <p className="inventory-empty">
+                  {inventory.capabilities.serverRunning
+                    ? "Belum ada session pada socket ini."
+                    : "SSH terhubung. Belum ada server tmux aktif pada socket ini."}
+                </p>
+              ) : (
+                <ul className="session-list">
+                  {inventory.sessions.map((session) => (
+                    <li key={session.id}>
+                      <div className="session-heading">
+                        <Terminal size={16} />
+                        <strong>{session.name}</strong>
+                        <code>{session.id}</code>
+                      </div>
+                      <ul>
+                        {session.windows.map((window) => (
+                          <li key={window.id}>
+                            <div className="window-heading">
+                              <span>
+                                {window.index}: {window.name}
+                              </span>
+                              <code>{window.id}</code>
+                              {window.active && (
+                                <span className="active-label">aktif</span>
+                              )}
+                            </div>
+                            <ul>
+                              {window.panes.map((pane) => (
+                                <li className="pane-row" key={pane.id}>
+                                  <code>{pane.id}</code>
+                                  <span>{pane.command || "proses"}</span>
+                                  <span>
+                                    {pane.width} × {pane.height}
+                                  </span>
+                                  {pane.active && (
+                                    <span className="active-label">aktif</span>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
           <div className="info-notice">
-            <CircleHelp size={17} />
+            <Eye size={16} />
             <span>
-              Konektor {host.transport === "ssh" ? "SSH" : "Agent"} sedang
-              menunggu tahap implementasi berikutnya. Terminal belum tersedia.
+              Tahap ini hanya membaca inventaris. Terminal interaktif menyusul
+              pada T12; tidak ada session atau proses tmux yang diubah.
             </span>
           </div>
           <div className="modal-actions">
             {canDelete && (
               <button
                 className="button text-danger"
+                disabled={busy}
                 onClick={() => setConfirm(true)}
               >
                 <Trash2 size={16} />
                 Hapus profil
               </button>
             )}
-            <button className="button secondary" onClick={onClose}>
+            <button
+              className="button secondary"
+              disabled={busy}
+              onClick={onClose}
+            >
               Tutup
             </button>
           </div>

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/xibitz/tmux-monitor/internal/config"
+	sshconnector "github.com/xibitz/tmux-monitor/internal/connector/ssh"
 	"github.com/xibitz/tmux-monitor/internal/identity"
 	"github.com/xibitz/tmux-monitor/internal/storage"
 )
@@ -40,16 +41,20 @@ type Server struct {
 	loginMu       sync.Mutex
 	loginWindow   time.Time
 	loginAttempts int
+	ssh           sshObserver
 }
 
 func New(db *sql.DB, cfg config.Config, assets fs.FS, logger *slog.Logger) *Server {
 	s := &Server{db: db, cfg: cfg, assets: assets, log: logger}
+	s.ssh = sshconnector.New(s.credentials(), cfg.AllowedSSHHosts)
 	api := http.NewServeMux()
 	api.HandleFunc("POST /api/v1/auth/login", s.login)
 	api.HandleFunc("POST /api/v1/auth/logout", s.logout)
 	api.HandleFunc("GET /api/v1/me", s.me)
 	api.HandleFunc("GET /api/v1/hosts", s.listHosts)
 	api.HandleFunc("GET /api/v1/hosts/options", s.hostOptions)
+	api.HandleFunc("GET /api/v1/hosts/{id}/ssh", s.sshMetadata)
+	api.HandleFunc("POST /api/v1/hosts/{id}/probe", s.probe)
 	api.HandleFunc("POST /api/v1/hosts", s.createHost)
 	api.HandleFunc("PATCH /api/v1/hosts/{id}", s.updateHost)
 	api.HandleFunc("DELETE /api/v1/hosts/{id}", s.deleteHost)

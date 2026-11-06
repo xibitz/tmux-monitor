@@ -1,6 +1,6 @@
 # Implementation Plan — Mobile Tmux Manager
 
-**Versi:** 1.0 · **Tanggal:** 6 November 2026  
+**Versi:** 1.1 · **Tanggal:** 6 November 2026
 **Rujukan kebutuhan:** [PRD.md](PRD.md)  
 **Strategi:** irisan vertikal yang dapat diuji pada SSH dahulu, lalu paritas Agent, manajemen lengkap, control mode, dan notifikasi. P0 tidak dianggap siap dipakai pada host penting sebelum gate keamanan dan keselamatan lulus.
 
@@ -17,8 +17,8 @@ pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus
 | T01 | TODO | Matriks host Linux/Agent dan HP Android/iOS nyata belum disiapkan. |
 | T02 | PARTIAL | Spike tmux 3.8 macOS dan ADR 0001 tersedia; matriks versi, minimum versi, output burst dan ukuran tanpa desktop belum tuntas. |
 | T03 | PARTIAL | Login/ACL/CSRF/Origin/audit dan localhost-only diuji; live Serve/Grants negative tests belum. |
-| T10 | IN_PROGRESS | Profil CRUD, allowlist dan saran alamat tersedia; credential store, host key pinning, SSH probe sedang dikerjakan. |
-| T11 | TODO | Parser inventaris, epoch dan cache stale menyusul setelah fondasi konektor SSH. |
+| T10 | PARTIAL | Kode onboarding key lokal, pin host key, pembatas jaringan, probe/API/UI selesai dan uji lokal lulus; verifikasi CI Linux checkpoint ini sedang disiapkan. |
+| T11 | PARTIAL | Parser, native IDs/epoch/revision, snapshot SSH dan cache stale selesai; integrasi SSH + tmux terisolasi macOS lulus, CI Linux menunggu. |
 | T12 | TODO | PTY SSH, WebSocket, xterm.js, read-only/interactive, bounded buffers. |
 | T13 | TODO | Reconnect, status SSH, no replay dan error taxonomy terminal. |
 | T20 | TODO | Mutasi session dengan epoch/revision, idempotency, konfirmasi/audit. |
@@ -39,17 +39,17 @@ pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus
 | T52 | TODO | Notifikasi in-app dan Web Push opt-in tanpa isi sensitif. |
 | T60 | TODO | Tab/favorit/pencarian dan tuning berbasis benchmark. |
 
-### Checklist irisan aktif T10–T11
+### Checklist irisan T10–T11
 
 - [x] Registri profil dan allowlist admin; opsi alamat dan petunjuk pada UI.
-- [ ] Kontrak onboarding credential lokal dan metadata/probe API.
-- [ ] Migrasi 002 credential reference dan cache observasi yang dapat di-rollback.
-- [ ] Penyimpanan key/known_hosts aman; CLI configure/revoke, tanpa secret API.
-- [ ] SSH auth, host key pinning, batas jaringan tailnet, timeout dan output.
-- [ ] Katalog perintah tmux dan parser inventaris native IDs/epoch/revision.
-- [ ] Probe/inventaris terotorisasi, audit, status dan cache stale yang jujur.
-- [ ] UI konfigurasi/probe dan pohon session/window/pane; terminal tetap gated.
-- [ ] Uji key salah, credential hilang/revoke, input/command injection, timeout,
+- [x] Kontrak onboarding credential lokal dan metadata/probe API.
+- [x] Migrasi 002 credential reference dan cache observasi yang dapat di-rollback.
+- [x] Penyimpanan private key + public pin aman; CLI configure/revoke, tanpa secret API (ADR 0002).
+- [x] SSH auth, host key pinning, batas jaringan tailnet, timeout dan output.
+- [x] Katalog perintah tmux dan parser inventaris native IDs/epoch/revision.
+- [x] Probe/inventaris terotorisasi, audit, status dan cache stale yang jujur.
+- [x] UI konfigurasi/probe dan pohon session/window/pane; terminal tetap gated.
+- [x] Uji key salah, credential hilang/revoke, input/command injection, timeout,
   ACL/CSRF, output malformed/berlebih, cache stale dan tmux restart.
 - [ ] Uji SSH + tmux pada host/perangkat matriks yang benar-benar tersedia.
 - [ ] Checkpoint: format/vet/TypeScript/race/build/CI; update memory dan status.

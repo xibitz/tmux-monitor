@@ -14,13 +14,13 @@ Pengguna meminta development diteruskan dan status ditulis agar agent baru bisa
 melanjutkan tanpa mengandalkan riwayat chat. **Memory ini wajib diperbarui setelah
 checkpoint, sebelum berhenti, dan sebelum context/token habis.**
 
-Baseline yang sudah ada: hub localhost-only, SQLite WAL, migrasi 001, bootstrap
+Baseline yang sudah ada: hub localhost-only, SQLite WAL, migrasi 001/002, bootstrap
 admin, Argon2id, cookie sesi, ACL, CSRF/Origin, profil host, audit, UI responsif,
 petunjuk allowlist SSH, Makefile dan CI. Commit baseline terakhir sebelum
 checkpoint ini: `1d8c1cf` (sebelumnya `5c99762`, fondasi; `a879f8c`, rancangan).
 
 **Pekerjaan aktif: T10 konektor SSH, lalu T11 inventaris.** Saat memory ini dibuat,
-SSH/Agent dan terminal belum tersedia. Jangan menandai seluruh M1 selesai hanya
+fondasi SSH sedang dikodekan; Agent dan terminal belum tersedia. Jangan menandai seluruh M1 selesai hanya
 karena profil berhasil disimpan. T12 terminal dan T13 reconnect adalah gate
 tersendiri. Semua task P0 yang belum selesai tetap wajib sebelum rilis aman.
 
@@ -135,11 +135,34 @@ pakai binary, origin HTTPS dan DEV=false; jangan melemahkan Origin check.
 
 ## Checkpoint aktif untuk agent berikutnya
 
-- Dokumentasi: daftar status sudah ditambahkan ke implementation plan dan
-  `docs/PROGRESS.md` sudah diarahkan ke satu sumber status tersebut.
-- Berikutnya: implementasikan T10/T11 sesuai langkah 2–3, mulai dari kontrak API,
-  migration 002, credential store/CLI dan konektor SSH yang diuji terisolasi.
-- Belum ada kode SSH pada checkpoint awal ini. Saat kode berubah, perbarui bagian
-  ini dengan file penting, hasil verifikasi dan pekerjaan berikutnya secara tepat.
-- Jangan menghidupkan/mematikan proses pengguna hanya untuk smoke test; gunakan
-  port dan database uji terpisah. Jangan menjanjikan terminal sebelum T12 lulus.
+- Dokumentasi awal telah di-commit sebagai `b7b8c1c`; tabel per-task dan aturan
+  tersedia. Kode T10/T11 sudah selesai dan diuji lokal; status tetap PARTIAL di
+  implementation plan sampai CI Linux checkpoint ini diverifikasi.
+- File inti: migration `002_ssh_observation`, `internal/connector/ssh/` (store,
+  pin/auth, timeout, tailnet address check), `internal/tmux/inventory.go` (katalog
+  command/parser/epoch/revision), `internal/httpapi/ssh.go` (probe/cache/audit),
+  CLI di `cmd/hub/main.go`, UI detail/inventaris di `apps/web/src/main.tsx`.
+- Lulus lokal: `make check test build`, race tests, SSH protocol server dengan
+  key sementara, tmux nyata pada socket terisolasi (no server, server tanpa
+  session, rename, split, close window, restart), pin mismatch dan multi-key,
+  RSA SHA2, output limit, cancellation, ACL/CSRF, stale cache, revoke-in-flight,
+  corrupt/cross-host cache, rollback 002 yang mempertahankan data 001.
+- Browser fixture lulus: login, metadata SSH, probe fresh lalu timeout/stale,
+  pohon session/window/pane, timestamp tetap pada snapshot lama; tidak ada
+  console warning/error atau overflow horizontal pada viewport 393 px.
+  Ini simulasi hasil SSH untuk UI; protokol SSH dan tmux nyata diuji terpisah.
+- Temuan yang sudah diperbaiki dan diberi regresi: embedded bytes.Buffer membuat
+  io.Copy melewati batas; tmux tanpa session menormalisasi tab dan gagal list
+  target; SSH multi-key harus dinegosiasikan sesuai key yang dipin.
+- Berikutnya sekarang: commit/push kode, lihat CI Linux (workflow memasang tmux),
+  perbaiki jika gagal, lalu tutup T10/T11 dan perbarui checkpoint ini.
+- Setelah itu: T12 sesuai langkah 4. Sebelum terminal dibuka, selesaikan kebijakan
+  ukuran tanpa desktop (ADR 0001) dan negative access gate T03. Jangan menganggap
+  validasi CIDR sudah membuktikan routing/keanggotaan Tailscale (ADR 0002).
+- Backend/data pengguna belum direstart/dimigrasi oleh agent. Sesudah upgrade,
+  pengguna perlu menghentikan backend lama, backup data penting, memuat .env,
+  dan menjalankan backend baru (migrasi 002 otomatis). CLI ssh-configure memakai
+  direktori data yang sama, key khusus hub dan fingerprint yang diverifikasi.
+  Jangan menghidupkan/mematikan proses pengguna hanya untuk smoke test.
+- Semua test memakai key/DB/socket sementara. Key, host pribadi dan .env pengguna
+  tidak dipakai atau dimasukkan Git. Terminal/Agent tetap belum tersedia.

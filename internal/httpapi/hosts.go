@@ -29,6 +29,7 @@ type Host struct {
 	ObservedAt   *string `json:"observedAt"`
 	CreatedAt    string  `json:"createdAt"`
 	UpdatedAt    string  `json:"updatedAt"`
+	Stale        bool    `json:"stale"`
 }
 
 var safeName = regexp.MustCompile(`^[A-Za-z0-9._][A-Za-z0-9._-]{0,63}$`)
@@ -85,19 +86,11 @@ func (s *Server) hostOptions(w http.ResponseWriter, r *http.Request) {
 	s.json(w, http.StatusOK, map[string]any{"allowedSSHHosts": addresses})
 }
 
-const hostColumns = "id,label,transport,tailnet_address,os_user,socket_name,environment,created_at,updated_at"
-
 type scanner interface{ Scan(...any) error }
-
-func scanHost(row scanner) (Host, error) {
-	h := Host{State: "UNREACHABLE", StatusReason: "connector_pending"}
-	err := row.Scan(&h.ID, &h.Label, &h.Transport, &h.TailnetAddress, &h.OSUser, &h.SocketName, &h.Environment, &h.CreatedAt, &h.UpdatedAt)
-	return h, err
-}
 
 func (s *Server) listHosts(w http.ResponseWriter, r *http.Request) {
 	u := user(r)
-	rows, err := s.db.QueryContext(r.Context(), "SELECT "+hostColumns+" FROM hosts WHERE ? OR id IN (SELECT host_id FROM host_access WHERE user_id=? AND action='host:read') ORDER BY label,id", u.IsAdmin, u.ID)
+	rows, err := s.db.QueryContext(r.Context(), "SELECT "+observedHostColumns+observedHostJoin+"WHERE ? OR h.id IN (SELECT host_id FROM host_access WHERE user_id=? AND action='host:read') ORDER BY h.label,h.id", u.IsAdmin, u.ID)
 	if err != nil {
 		s.internal(w, r)
 		return
@@ -105,7 +98,7 @@ func (s *Server) listHosts(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	hosts := []Host{}
 	for rows.Next() {
-		h, err := scanHost(rows)
+		h, err := scanObservedHost(rows)
 		if err != nil {
 			s.internal(w, r)
 			return
@@ -131,7 +124,10 @@ func (s *Server) createHost(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, 422, "invalid_request", msg)
 		return
 	}
-	h := Host{HostInput: input, ID: storage.ID("h_"), State: "UNREACHABLE", StatusReason: "connector_pending", CreatedAt: storage.Now(), UpdatedAt: storage.Now()}
+	h := Host{HostInput: input, ID: storage.ID("h_"), State: "UNREACHABLE", StatusReason: "connector_pending", CreatedAt: storage.Now(), UpdatedAt: storage.Now(), Stale: true}
+	if h.Transport == "ssh" {
+		h.StatusReason = "credentials_required"
+	}
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
 		s.internal(w, r)
@@ -173,7 +169,7 @@ func (s *Server) updateHost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
-	h, err := scanHost(tx.QueryRowContext(r.Context(), "SELECT "+hostColumns+" FROM hosts WHERE id=?", r.PathValue("id")))
+	h, err := scanObservedHost(tx.QueryRowContext(r.Context(), "SELECT "+observedHostColumns+observedHostJoin+"WHERE h.id=?", r.PathValue("id")))
 	if errors.Is(err, sql.ErrNoRows) {
 		s.fail(w, r, 404, "not_found", "Profil host tidak ditemukan.")
 		return
@@ -214,6 +210,12 @@ func (s *Server) deleteHost(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 	id := r.PathValue("id")
+	var keyRef string
+	lookupErr := tx.QueryRowContext(r.Context(), "SELECT key_ref FROM ssh_credentials WHERE host_id=?", id).Scan(&keyRef)
+	if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
+		s.internal(w, r)
+		return
+	}
 	result, err := tx.ExecContext(r.Context(), "DELETE FROM hosts WHERE id=?", id)
 	if err != nil {
 		s.internal(w, r)
@@ -236,6 +238,11 @@ func (s *Server) deleteHost(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, r)
 		return
 	}
+	if keyRef != "" {
+		if err := s.credentials().Remove(keyRef); err != nil {
+			s.log.Warn("credential cleanup deferred", "request_id", requestID(r))
+		}
+	}
 	w.WriteHeader(204)
 }
 
@@ -251,5 +258,15 @@ func (s *Server) inventory(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, r)
 		return
 	}
-	s.fail(w, r, 503, "transport_unavailable", "Konektor host belum tersedia pada fondasi ini. Status tmux belum diperiksa.")
+	h, err := s.observedHost(r.Context(), id)
+	if err != nil {
+		s.internal(w, r)
+		return
+	}
+	inv, err := s.observe(r, h, false)
+	if err != nil {
+		s.observationError(w, r, err)
+		return
+	}
+	s.json(w, 200, inv)
 }

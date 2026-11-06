@@ -16,6 +16,51 @@ export type Host = HostInput & {
   observedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  stale: boolean;
+};
+export type SSHMetadata = {
+  configured: boolean;
+  port?: number;
+  fingerprint?: string;
+  configuredAt?: string;
+};
+export type Inventory = {
+  hostId: string;
+  socketId: string;
+  transport: string;
+  state: string;
+  statusReason: string;
+  observedAt: string;
+  stale: boolean;
+  epoch: string;
+  capabilities: {
+    inventory: boolean;
+    ptyAttach: boolean;
+    controlMode: boolean;
+    independentPane: boolean;
+    tmuxVersion: string;
+    serverRunning: boolean;
+  };
+  sessions: {
+    id: string;
+    name: string;
+    revision: string;
+    windows: {
+      id: string;
+      name: string;
+      index: number;
+      active: boolean;
+      revision: string;
+      panes: {
+        id: string;
+        active: boolean;
+        width: number;
+        height: number;
+        command: string;
+        revision: string;
+      }[];
+    }[];
+  }[];
 };
 export type AuditEvent = {
   id: number;

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/xibitz/tmux-monitor/internal/config"
+	sshconnector "github.com/xibitz/tmux-monitor/internal/connector/ssh"
 	"github.com/xibitz/tmux-monitor/internal/httpapi"
 	"github.com/xibitz/tmux-monitor/internal/identity"
 	"github.com/xibitz/tmux-monitor/internal/storage"
@@ -35,8 +36,8 @@ func run() error {
 	if len(os.Args) > 1 {
 		command = os.Args[1]
 	}
-	if command != "serve" && command != "bootstrap" && command != "migrate" {
-		return fmt.Errorf("usage: hub [serve|bootstrap|migrate]")
+	if command != "serve" && command != "bootstrap" && command != "migrate" && command != "ssh-configure" && command != "ssh-revoke" {
+		return fmt.Errorf("usage: hub [serve|bootstrap|migrate|ssh-configure|ssh-revoke]")
 	}
 	// Bootstrap and migrations are local-only and do not need a public origin.
 	dataDir := os.Getenv("TMUX_MONITOR_DATA_DIR")
@@ -82,6 +83,37 @@ func run() error {
 	}
 	if err := storage.Migrate(ctx, db, storage.LatestVersion); err != nil {
 		return fmt.Errorf("migrate database: %w", err)
+	}
+	if command == "ssh-configure" || command == "ssh-revoke" {
+		flags := flag.NewFlagSet(command, flag.ContinueOnError)
+		hostID := flags.String("host-id", "", "SSH host profile ID")
+		key := flags.String("key-file", "", "dedicated private key file (owner-only permissions)")
+		public := flags.String("host-key-file", "", "one public host key verified out of band")
+		fingerprint := flags.String("expected-fingerprint", "", "verified SHA256 host key fingerprint")
+		port := flags.Int("port", 22, "SSH port")
+		if err := flags.Parse(os.Args[2:]); err != nil {
+			return err
+		}
+		if *hostID == "" || flags.NArg() != 0 {
+			return fmt.Errorf("--host-id is required; no positional arguments allowed")
+		}
+		store := sshconnector.Store{DB: db, DataDir: dataDir}
+		if command == "ssh-revoke" {
+			if err := store.Revoke(ctx, *hostID); err != nil {
+				return err
+			}
+			fmt.Println("SSH configuration revoked.")
+			return nil
+		}
+		if *key == "" || *public == "" || *fingerprint == "" {
+			return fmt.Errorf("--key-file, --host-key-file and --expected-fingerprint are required")
+		}
+		meta, err := store.Configure(ctx, *hostID, *key, *public, *fingerprint, *port)
+		if err != nil {
+			return err
+		}
+		fmt.Println("SSH configuration saved. Verified host key:", meta.Fingerprint)
+		return nil
 	}
 	if command == "bootstrap" {
 		flags := flag.NewFlagSet("bootstrap", flag.ContinueOnError)

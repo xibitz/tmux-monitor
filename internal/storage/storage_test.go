@@ -15,7 +15,7 @@ func TestMigrationRollbackReapplyAndPermissions(t *testing.T) {
 	}
 	defer db.Close()
 	ctx := context.Background()
-	for _, version := range []int{1, 1, 0, 1} {
+	for _, version := range []int{1, 2, 2, 1, 0, 2} {
 		if err := Migrate(ctx, db, version); err != nil {
 			t.Fatal(err)
 		}
@@ -52,5 +52,29 @@ func TestMigrationRollbackReapplyAndPermissions(t *testing.T) {
 	}
 	if err := Migrate(ctx, db, 1); err == nil {
 		t.Fatal("accepted newer database schema")
+	}
+}
+
+func TestSSHMigrationPreservesFoundationData(t *testing.T) {
+	db, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	if err := Migrate(ctx, db, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("INSERT INTO hosts(id,label,transport,os_user,socket_name,created_at,updated_at) VALUES ('existing','Existing','ssh','dev','default',?,?)", Now(), Now()); err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range []int{2, 1, 2} {
+		if err := Migrate(ctx, db, target); err != nil {
+			t.Fatal(err)
+		}
+		var label string
+		if err := db.QueryRow("SELECT label FROM hosts WHERE id='existing'").Scan(&label); err != nil || label != "Existing" {
+			t.Fatal("foundation data changed by migration 002")
+		}
 	}
 }

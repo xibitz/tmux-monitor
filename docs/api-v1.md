@@ -9,7 +9,7 @@ All timestamps use RFC 3339 UTC. All responses under `/api` and `/ws` use
 
 | Method and path | Authorization | Request / response |
 | --- | --- | --- |
-| `GET /healthz` | Local listener | `{"status":"ok","schemaVersion":1}`; 503 if storage is unavailable |
+| `GET /healthz` | Local listener | `{"status":"ok","schemaVersion":2}`; 503 if storage is unavailable |
 | `POST /api/v1/auth/login` | Exact configured Origin, rate limited | `{username,password}` → `{user,csrfToken}` and session cookie; generic 401 for invalid credentials |
 | `GET /api/v1/me` | Session | `{user:{id,username,isAdmin},csrfToken}` |
 | `POST /api/v1/auth/logout` | Session + CSRF | 204; revoke session and expire cookie |
@@ -18,7 +18,9 @@ All timestamps use RFC 3339 UTC. All responses under `/api` and `/ws` use
 | `POST /api/v1/hosts` | Admin + CSRF | `HostInput` → 201 `Host`; creates configuration only |
 | `PATCH /api/v1/hosts/{id}` | Admin + CSRF | Full `HostInput` → `Host`; future connector configuration is immutable in this milestone |
 | `DELETE /api/v1/hosts/{id}` | Admin + CSRF | 204; deletes profile only, never touches tmux |
-| `GET /api/v1/hosts/{id}/inventory` | Host read | 503 `transport_unavailable` until the connector exists; 404 for inaccessible/absent hosts |
+| `GET /api/v1/hosts/{id}/ssh` | Admin | SSH configuration metadata: configured, port, host key fingerprint and configuredAt; no key or secret path |
+| `POST /api/v1/hosts/{id}/probe` | Admin + CSRF | Run bounded SSH/tmux observation; `{host,inventory}` on success; audit metadata only |
+| `GET /api/v1/hosts/{id}/inventory` | `tmux:read` | Fresh SSH snapshot, or last successful snapshot marked stale on failure; 404 for inaccessible/absent hosts |
 | `GET /api/v1/audit?limit=50&before=123` | Admin | `{events:[AuditEvent],nextCursor:"…"}`; maximum limit 100 |
 
 Mutations require `Origin` equal to `TMUX_MONITOR_ORIGIN` and
@@ -35,10 +37,51 @@ administrator allowlist. Agent addresses must be empty. User and socket names us
 `[A-Za-z0-9._-]{1,64}` and must not start with `-`. Unknown fields are rejected.
 This endpoint does not accept credentials. It does not enroll an agent.
 
-`Host` adds `id`, `state:"UNREACHABLE"`, `statusReason:"connector_pending"`,
-`createdAt`, `updatedAt`, and `observedAt:null`. The last three connection fields
-are deliberately honest about the unimplemented connection probe. Do not treat
-this state as evidence that tmux or a process has stopped.
+`Host` adds `id`, `state`, `statusReason`, `stale`, `createdAt`, `updatedAt`,
+and nullable `observedAt`. State is the last explicit observation, not a live
+transport guarantee. New profiles have no observation; Agent is pending, and
+SSH needs local credential configuration. Old observations are marked stale.
+Unreachable state never implies that a tmux process has stopped.
+
+## SSH observation slice (T10–T11)
+
+Host connection state is now derived from the last explicit observation. Listing
+profiles never opens SSH connections. Initial SSH reason is `credentials_required`;
+Agent remains `connector_pending`. `observedAt` is the last probe attempt, not
+evidence that a cached inventory is current. SSH metadata and options are admin-only.
+
+Configure SSH locally with `hub ssh-configure --host-id ID --key-file PATH
+--host-key-file PATH --expected-fingerprint SHA256:... [--port 22]`. The public
+host key file must contain one OpenSSH public key obtained through a trusted
+channel. The explicit expected fingerprint must match; this command never
+fetches/trusts a key from the network. Private keys must be unencrypted dedicated
+keys in files accessible only to their owner. The hub copies the private key to
+its private secret directory; SQLite stores an opaque reference and public pin.
+Local `hub ssh-revoke --host-id ID` revokes configuration, removes the owned key
+file and invalidates cached inventory. Neither command connects to the host.
+
+Dial requires the profile address to remain in the administrator allowlist, and
+every resolved IP must be in Tailscale's IPv4/IPv6 address space. The client dials
+the verified IP directly (no second DNS lookup), verifies the pinned host key,
+authenticates with the dedicated key, checks `id -un`, then runs only fixed
+read-only tmux commands. Overall timeout: 10 seconds. At most four observations
+globally and one per host; excess requests return 429. Stdout is limited to 1 MiB and stderr to 16 KiB per command.
+
+Inventory has `hostId`, `socketId`, `transport`, `state`, `statusReason`,
+`observedAt`, `stale`, `epoch`, `capabilities`, and nested sessions/windows/panes
+with native IDs and revisions. A fresh empty inventory is valid when SSH works
+but no tmux server exists (`epoch:""`, `serverRunning:false`). PTY/control mode
+capabilities remain false until separately implemented and tested. Cached data
+always retains its original `observedAt` and is marked `stale:true` after failure.
+No stale snapshot is presented as live. With no cache, failures are sanitized
+422 configuration/validation, 423 unreachable, 429 busy, or 503 degraded/unsupported.
+No raw SSH/command stderr is returned or persisted. Probe failures are audited.
+
+New reasons include `credentials_required`, `credentials_invalid`,
+`address_not_allowed`, `address_not_tailnet`, `host_key_mismatch`,
+`authentication_failed`, `timeout`, `connection_failed`, `os_user_mismatch`,
+`tmux_missing`, `inventory_invalid`, `inventory_changed`, `output_limit`,
+`agent_unavailable`. An SSH connection failure never means a tmux process died.
 
 `AuditEvent` contains `id`, `actor`, `action`, optional `hostId`, `result`,
 `requestId`, and `at`. Audit metadata never includes passwords, session tokens,

@@ -7,6 +7,7 @@ import (
 	"embed"
 	"encoding/hex"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -18,7 +19,7 @@ import (
 //go:embed migrations/*.sql
 var migrations embed.FS
 
-const LatestVersion = 1
+const LatestVersion = 2
 
 func Open(dataDir string) (*sql.DB, error) {
 	if err := os.MkdirAll(dataDir, 0700); err != nil {
@@ -83,7 +84,11 @@ func Migrate(ctx context.Context, db *sql.DB, target int) error {
 		if target < version {
 			number, direction = version, "down"
 		}
-		body, readErr := migrations.ReadFile(fmt.Sprintf("migrations/%03d_foundation.%s.sql", number, direction))
+		matches, globErr := fs.Glob(migrations, fmt.Sprintf("migrations/%03d_*.%s.sql", number, direction))
+		if globErr != nil || len(matches) != 1 {
+			return fmt.Errorf("expected one migration for version %d %s", number, direction)
+		}
+		body, readErr := migrations.ReadFile(matches[0])
 		if readErr != nil {
 			return readErr
 		}

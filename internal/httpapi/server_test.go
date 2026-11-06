@@ -36,14 +36,14 @@ func setup(t *testing.T) *harness {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	if err := storage.Migrate(context.Background(), db, 1); err != nil {
+	if err := storage.Migrate(context.Background(), db, storage.LatestVersion); err != nil {
 		t.Fatal(err)
 	}
 	if err := identity.Bootstrap(context.Background(), db, "admin", testPassword); err != nil {
 		t.Fatal(err)
 	}
 	logs := new(bytes.Buffer)
-	s := New(db, config.Config{Listen: "127.0.0.1:8080", Origin: testOrigin, AllowedSSHHosts: map[string]bool{"laptop.example.ts.net": true}}, fstest.MapFS{"index.html": {Data: []byte("<!doctype html><h1>workspace</h1>")}, "assets/main.js": {Data: []byte("console.log('app')")}}, slog.New(slog.NewJSONHandler(logs, nil)))
+	s := New(db, config.Config{DataDir: t.TempDir(), Listen: "127.0.0.1:8080", Origin: testOrigin, AllowedSSHHosts: map[string]bool{"laptop.example.ts.net": true}}, fstest.MapFS{"index.html": {Data: []byte("<!doctype html><h1>workspace</h1>")}, "assets/main.js": {Data: []byte("console.log('app')")}}, slog.New(slog.NewJSONHandler(logs, nil)))
 	h := &harness{server: s, db: db, logs: logs}
 	r := h.request("POST", "/api/v1/auth/login", `{"username":"admin","password":"`+testPassword+`"}`, false, true, "")
 	if r.Code != 200 {
@@ -176,7 +176,7 @@ func TestHostCRUDValidationAuditAndNoFakeInventory(t *testing.T) {
 	if host.SocketName != "default" || host.ObservedAt != nil || host.State != "UNREACHABLE" {
 		t.Fatalf("invented host status %+v", host)
 	}
-	if r = h.request("GET", "/api/v1/hosts/"+host.ID+"/inventory", "", true, false, ""); r.Code != 503 || !strings.Contains(r.Body.String(), "transport_unavailable") {
+	if r = h.request("GET", "/api/v1/hosts/"+host.ID+"/inventory", "", true, false, ""); r.Code != 422 || !strings.Contains(r.Body.String(), "credentials_required") {
 		t.Fatal("fake inventory returned")
 	}
 	if r = h.request("GET", "/api/v1/hosts", "", true, false, ""); r.Code != 200 || !strings.Contains(r.Body.String(), host.ID) {
