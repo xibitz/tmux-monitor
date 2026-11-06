@@ -1,6 +1,6 @@
-# Foundation API contract
+# API v1 contract
 
-The PRD remains the product contract. This file defines the implemented M0 subset;
+The PRD remains the product contract. This file defines the implemented M0 and SSH slices;
 unimplemented connectors never return invented inventory or connection success.
 All timestamps use RFC 3339 UTC. All responses under `/api` and `/ws` use
 `Cache-Control: no-store`. IDs are opaque. Errors have the form
@@ -98,7 +98,7 @@ the ticket, rechecks authorization and reserves a viewer (8 global / 4 per user 
 needed on upgrade: the one-use ticket was issued by a CSRF-protected POST.
 
 The connector freshly verifies the pinned SSH host, OS user, tmux server epoch
-and session. Requires tmux >=3.4, global default `window-size manual` and every
+and session. Requires tmux >=3.7, global default `window-size manual` and every
 window in the selected session effectively `manual`. The application never
 changes remote options. Otherwise it reports `terminal_size_policy` and does not
 attach. The PTY uses the active remote window size plus its status rows (maximum

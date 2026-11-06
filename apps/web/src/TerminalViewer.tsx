@@ -6,7 +6,7 @@ import "@xterm/xterm/css/xterm.css";
 
 const reasons: Record<string, string> = {
   terminal_size_policy:
-    "Ukuran tmux belum aman untuk viewer. Diperlukan tmux 3.4+ dan window-size manual pada default global serta semua window session. Panduan ada di README bagian terminal read-only.",
+    "Ukuran tmux belum aman untuk viewer. Diperlukan tmux 3.7+ dan window-size manual pada default global serta semua window session. Panduan ada di README bagian terminal read-only.",
   terminal_target_changed:
     "Session, window aktif, atau ukuran berubah. Periksa inventaris lalu buka ulang viewer.",
   access_revoked: "Akses atau konfigurasi SSH berubah. Viewer dilepas.",

@@ -15,7 +15,7 @@ pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus
 |---|---|---|
 | T00 | DONE | Struktur Go/React, build, CI, konfigurasi contoh, migrasi 001 naik/turun, health. CI Linux dan uji lokal lulus. |
 | T01 | TODO | Matriks host Linux/Agent dan HP Android/iOS nyata belum disiapkan. |
-| T02 | PARTIAL | Spike tmux 3.8 macOS: manual sizing tanpa desktop/dua window/PTY resize/detach lulus; minimum 3.4 enforced untuk viewer. Matriks versi/perangkat luas dan control mode belum tuntas. |
+| T02 | PARTIAL | Spike tmux 3.8 macOS: manual sizing tanpa desktop/dua window/PTY resize/detach lulus; minimum 3.7 enforced untuk viewer. Matriks versi/perangkat luas dan control mode belum tuntas. |
 | T03 | PARTIAL | Login/ACL/CSRF/Origin/audit dan localhost-only diuji; live Serve/Grants negative tests belum. |
 | T10 | DONE | Key store/CLI configure-revoke, pin dan algoritme host key, tailnet address guard, bounded probe/API/UI; uji lokal dan CI Linux lulus. Uji tailnet nyata tetap T01/T03. |
 | T11 | DONE | Parser/epoch/revision, SSH snapshot, cache stale/revoke dan UI; uji tmux nyata terisolasi di macOS serta CI Linux lulus (empty/rename/split/kill/restart). |
@@ -184,6 +184,11 @@ Contoh `GET inventory`:
 ```
 
 ### WebSocket browser
+
+Irisan T12 read-only aktual memakai POST tiket sekali pakai untuk mengikat target
+sebelum upgrade; belum menerima `terminal.open`/set_mode/resize dari WebSocket.
+Format wire yang sudah dibangun dijelaskan di [kontrak API](docs/api-v1.md).
+Paragraf berikut tetap menjadi rancangan kemampuan lengkap yang belum selesai.
 
 `GET /ws/v1/terminal` dan `GET /ws/v1/events` hanya melalui HTTPS Serve. Upgrade memeriksa sesi, Origin, CSRF/nonce satu pakai, izin host, jumlah koneksi, dan `Sec-WebSocket-Protocol` versi yang disepakati. `terminal.open` meminta `hostId`, `sessionId`, `epoch`, `mode=read_only`, dan `cols/rows` viewport. Server membalas `terminal.opened` dengan `viewerId`, `mode`, `capabilities`, dan `sequence`.
 

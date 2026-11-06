@@ -35,8 +35,16 @@ windows, a smaller read-only PTY, PTY resize, window selection and detach. On tm
 `window-size manual` preserves both sizes. The CI workflow runs this same spike
 on Linux, in addition to the real SSH+PTY fixture in the Go integration suite.
 
+CI initially found that Ubuntu's tmux 3.6a exits unexpectedly on `new-window`
+after the disposable server's global manual option is set. This matches
+[upstream #4849](https://github.com/tmux/tmux/pull/4849), which describes a NULL
+window sizing crash and its fix. The minimum was raised from 3.4 to **3.7**;
+older servers are rejected by the viewer, and the spike refuses to run on them.
+CI now builds upstream tmux 3.8 from its release tarball, pinned by SHA256, and
+checks the selected binary version before executing integration tests.
+
 The initial viewer is disabled by default and requires operator opt-in. It
-requires tmux >=3.4 and freshly validates global/effective manual sizing before
+requires tmux >=3.7 and freshly validates global/effective manual sizing before
 attach, immediately afterward and periodically while viewing. The application
 never sets remote options. Automatic sizing is rejected; the fixed PTY grid is
 the current active window plus status rows, not the phone viewport. Changing
@@ -53,6 +61,6 @@ This evidence supports the planned PTY session view. It does not establish a
 minimum supported tmux version, independent per-pane navigation, epoch collision
 safety, correct interactive toggling, SSH transport behavior, or mobile browser
 input handling. Linux/macOS version coverage and physical phone tests remain
-open under T01/T02. Minimum 3.4 is enforced for the experimental slice; broader
+open under T01/T02. Minimum 3.7 is enforced for the experimental slice; broader
 version/OS/device qualification remains open. M4 still requires
 a real state machine parser, escaping, flow control, and multi-client tests.

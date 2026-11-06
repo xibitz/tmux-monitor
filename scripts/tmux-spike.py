@@ -5,6 +5,7 @@ import json
 import os
 import pathlib
 import pty
+import re
 import select
 import signal
 import struct
@@ -15,6 +16,10 @@ import time
 
 
 def main():
+    version = subprocess.check_output(["tmux", "-V"], text=True).strip()
+    match = re.fullmatch(r"tmux (\d+)\.(\d+)[a-z]?", version)
+    if not match or tuple(map(int, match.groups())) < (3, 7):
+        raise RuntimeError("manual sizing spike requires tmux >=3.7; older versions can crash the server")
     with tempfile.TemporaryDirectory(prefix="tmux-monitor-spike-") as directory:
         socket = str(pathlib.Path(directory) / "tmux.sock")
         prefix = ["tmux", "-S", socket, "-f", "/dev/null"]

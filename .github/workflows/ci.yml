@@ -24,10 +24,20 @@ jobs:
           cache-dependency-path: apps/web/package-lock.json
       - run: npm ci --prefix apps/web
       - run: go mod download
-      - name: Install tmux for isolated SSH integration test
+      - name: Build pinned tmux for isolated SSH integration tests
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y tmux
+          sudo apt-get install -y build-essential libevent-dev libncurses-dev bison pkg-config
+          curl --fail --location --retry 3 https://github.com/tmux/tmux/releases/download/3.8/tmux-3.8.tar.gz -o "$RUNNER_TEMP/tmux.tar.gz"
+          echo "e79c699c7e949dccd0a4a125e17b8d1261e311b16979dbc8eb34542f3966d82e  $RUNNER_TEMP/tmux.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/tmux.tar.gz" -C "$RUNNER_TEMP"
+          cd "$RUNNER_TEMP/tmux-3.8"
+          ./configure --prefix="$RUNNER_TEMP/tmux-install"
+          make -j2
+          make install
+          echo "$RUNNER_TEMP/tmux-install/bin" >> "$GITHUB_PATH"
+      - name: Verify supported tmux version
+        run: test "$(tmux -V)" = "tmux 3.8"
       - run: make check
       - run: make test
       - name: Verify isolated multi-client tmux sizing

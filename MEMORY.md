@@ -144,7 +144,7 @@ pakai binary, origin HTTPS dan DEV=false; jangan melemahkan Origin check.
   SSH dan tmux nyata diuji terpisah. Fixture tidak ikut binary production.
 - `scripts/tmux-spike.py` dan ADR 0001 membuktikan ukuran tetap untuk desktop
   normal + viewer read-only/ignore-size di tmux 3.8 macOS. Jika semua klien
-  ignore-size, ukuran dapat berubah. Irisan T12 sekarang menolak otomatis sizing, mensyaratkan tmux >=3.4
+  ignore-size, ukuran dapat berubah. Irisan T12 sekarang menolak otomatis sizing, mensyaratkan tmux >=3.7
   dan manual global/semua window; spike tambahan tanpa desktop lulus lokal.
   Matriks versi luas dan perangkat nyata tetap terbuka.
 - Belum ada uji ke host/key SSH pengguna, sshd host tailnet nyata, Agent,
@@ -192,13 +192,25 @@ hasil in-flight dari credential lama tidak boleh ditampilkan sebagai fresh.
 
 ## Checkpoint T12 read-only (7 November)
 
+Kode: `32af116` sudah dipush ke origin/main melalui SSH. CI Linux:
+https://github.com/xibitz/tmux-monitor/actions/runs/42305690493
+Run awal ini gagal pada fixture `new-window` setelah global window-size manual:
+tmux bawaan Ubuntu 3.6a crash, cocok upstream tmux/tmux#4849. Tidak mengenai host
+pengguna. Minimum viewer/spike dinaikkan dari 3.4 ke 3.7, regression test menolak
+3.4/3.6/3.6a/3.6b. CI kini build rilis resmi 3.8 dengan checksum SHA256 tetap,
+verifikasi selected binary sebelum suite. Hasil run perbaikan dicatat di bawah.
+Percobaan reproduksi Docker dibatalkan karena unduhan image tidak maju; log
+berhasil dibaca lewat sesi Chrome GitHub yang sudah terautentikasi. Tidak ada
+container/data aplikasi pengguna yang dipakai. Jangan klaim test Docker lulus.
+Cross-build Linux/amd64 CGO_ENABLED=0 lokal lulus.
+
 Kontrak berada di docs/api-v1.md. Backend baru memakai schema 3 (kolom target
 pada audit), dependensi coder/websocket 1.8.15, xterm 6.0.0 dan creack/pty 1.1.24
 (PTY hanya untuk test server). **T12/T13 PARTIAL**, interactive, mobile keyboard,
 real network switching dan gate Serve/Grants/HP belum dibuktikan.
 
 - `internal/tmux/terminal.go`: fixed catalog policy/attach, native session IDs,
-  fresh epoch, minimum tmux 3.4, global dan semua window manual; grid remote
+  fresh epoch, minimum tmux 3.7, global dan semua window manual; grid remote
   maksimal 500×200 + 5 status rows. Tidak mengubah opsi remote. Active window,
   ukuran/policy berubah => tutup viewer. Operator change dapat terjadi sebelum
   periodic check, jadi jangan menjanjikan invariant atomik terhadap aksi eksternal.
@@ -234,7 +246,7 @@ Bukti checkpoint lokal:
 - `make check test build` lulus (race suite termasuk real SSH+PTY/tmux, ticket
   Origin/CSRF/reuse/expiry/login binding, input/mode/resize rejection, framing,
   revoke login/ACL/key/host, detach, queue overload, kapasitas/shutdown, migrasi3).
-- `python3 scripts/tmux-spike.py` lulus tmux3.8 macOS: manual tanpa desktop,
+- `python3 scripts/tmux-spike.py` lulus tmux 3.8 macOS: manual tanpa desktop,
   dua window beda ukuran, PTY resize/window switch/detach mempertahankan ukuran;
   read-only memblokir new-window. Workflow Linux juga menjalankan spike ini.
 - Browser production build + CSP melalui test-only fixture, viewport393×852:

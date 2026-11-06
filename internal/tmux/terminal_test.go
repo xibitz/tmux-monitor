@@ -8,6 +8,18 @@ import (
 const policyFixture = "F|123|1700000000|/tmp/fixture/default|3.8\nmanual\nT|$0|on|@0|120|39\nW|@0|manual|120|39\nW|@1|manual|90|30\nF|123|1700000000|/tmp/fixture/default|3.8\n"
 
 func TestTerminalPolicyRequiresStableManualWindows(t *testing.T) {
+	for _, version := range []string{"3.4", "3.6", "3.6a", "3.6b"} {
+		output := strings.ReplaceAll(policyFixture, "3.8", version)
+		epoch := digest("e_", "host", "default", strings.Split(output, "\n")[0])
+		if _, err := ParseTerminalPolicy("host", "default", "$0", epoch, []byte(output)); err != ErrInvalid {
+			t.Fatalf("unsupported server %s accepted: %v", version, err)
+		}
+	}
+	for _, version := range []string{"3.7", "3.7a", "3.8", "4.0"} {
+		if !TerminalVersionSupported(version) {
+			t.Fatalf("supported version rejected: %s", version)
+		}
+	}
 	epoch := digest("e_", "host", "default", strings.Split(policyFixture, "\n")[0])
 	policy, err := ParseTerminalPolicy("host", "default", "$0", epoch, []byte(policyFixture))
 	if err != nil || policy.Cols != 120 || policy.Rows != 40 {

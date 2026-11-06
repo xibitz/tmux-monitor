@@ -159,6 +159,10 @@ func TestReadOnlyTerminalUsesRealSSHPTYAndPreservesSession(t *testing.T) {
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("tmux unavailable")
 	}
+	version, err := exec.Command("tmux", "-V").Output()
+	if err != nil || !tmux.TerminalVersionSupported(strings.TrimPrefix(strings.TrimSpace(string(version)), "tmux ")) {
+		t.Skip("manual sizing integration requires tmux >=3.7; CI pins a supported release")
+	}
 	f := setup(t)
 	f.host.Socket = "terminal-test"
 	dir, err := os.MkdirTemp("/tmp", "mtm-pty-")

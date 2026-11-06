@@ -32,13 +32,18 @@ klien tmux lain. Ia tidak menyediakan pane independen atau input keyboard.
 Ukuran mengikuti window remote; layar ponsel dapat digeser. Tutup/Kembali hanya
 detach. Bila putus, **Buka ulang** membuat viewer baru tanpa replay input.
 
-Prasyarat ukuran: tmux **3.4+**, default global `window-size manual` dan semua
+Prasyarat ukuran: tmux **3.7+**, default global `window-size manual` dan semua
 window pada session yang dilihat juga efektif `manual`. Tanpa itu, viewer menolak
 attach dengan pesan kebijakan ukuran. Aplikasi **tidak mengubah opsi tmux host**.
 Operator yang memilih kebijakan ini dapat menjalankan perintah berikut pada host
 target (sesuaikan socket dan native session ID dari inventaris):
 
+Minimum 3.7 diperlukan karena versi lama dapat mengalami crash server ketika
+membuat window/session dengan default manual; lihat [bug upstream tmux #4849](https://github.com/tmux/tmux/pull/4849).
+
 ```sh
+# Periksa versi dahulu. Jangan set global manual pada tmux di bawah 3.7.
+tmux -V
 # Catat opsi lama dahulu untuk dikembalikan sesuai konfigurasi Anda.
 tmux -L default show-options -gwv window-size
 tmux -L default list-windows -t '$0' -F '#{window_id} #{window-size} #{window_width}x#{window_height}'
@@ -234,11 +239,12 @@ Test mencakup batas jaringan, login, expiry/revoke, CSRF/Origin, default-deny AC
 validasi profil, audit atomik/redaksi, migrasi 001–003 naik/turun, WAL, permission
 file, host key mismatch, autentikasi SSH, tailnet-only dial, timeout/cancellation,
 output limit dan cache stale/revoke. Integrasi SSH memakai key/server protokol
-sementara dan tmux nyata pada socket test terpisah. CI memasang tmux di Linux.
+sementara dan tmux nyata pada socket test terpisah. CI membangun rilis resmi
+tmux 3.8 dengan checksum tetap di Linux.
 Spike juga membuat server tmux dengan socket sementara tersendiri,
 memeriksa klien read-only/ukuran/disconnect, lalu membersihkan server uji tersebut.
 Tidak menyambung ke session tmux Anda. Viewer eksperimental mensyaratkan tmux
-3.4+; matriks versi/OS yang lebih luas dan perangkat nyata tetap diperlukan
+3.7+; matriks versi/OS yang lebih luas dan perangkat nyata tetap diperlukan
 untuk dukungan rilis P0.
 
 CI memeriksa format, analisis Go, TypeScript, race tests, build web, dan build

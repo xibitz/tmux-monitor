@@ -13,6 +13,18 @@ type TerminalPolicy struct {
 	Signature string
 }
 
+// Older tmux releases have a server crash when spawning windows with the
+// global manual sizing policy (upstream #4849). Do not recommend that policy
+// or attach this experimental viewer on those releases.
+func TerminalVersionSupported(version string) bool {
+	if !versionPattern.MatchString(version) {
+		return false
+	}
+	var major, minor int
+	_, err := fmt.Sscanf(version, "%d.%d", &major, &minor)
+	return err == nil && (major > 3 || major == 3 && minor >= 7)
+}
+
 func TerminalPolicyCommand(socket, session string) (string, error) {
 	if !socketName.MatchString(socket) || !validID(session, '$') {
 		return "", ErrInvalid
@@ -52,8 +64,7 @@ func ParseTerminalPolicy(host, socket, session, epoch string, output []byte) (Te
 	if !validFingerprint(first) || lines[0] != lines[len(lines)-1] || digest("e_", host, socket, lines[0]) != epoch {
 		return policy, ErrChanged
 	}
-	var major, minor int
-	if _, err := fmt.Sscanf(first[4], "%d.%d", &major, &minor); err != nil || major < 3 || major == 3 && minor < 4 {
+	if !TerminalVersionSupported(first[4]) {
 		return policy, ErrInvalid
 	}
 	if lines[1] != "manual" {
