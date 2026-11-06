@@ -49,6 +49,7 @@ func New(db *sql.DB, cfg config.Config, assets fs.FS, logger *slog.Logger) *Serv
 	api.HandleFunc("POST /api/v1/auth/logout", s.logout)
 	api.HandleFunc("GET /api/v1/me", s.me)
 	api.HandleFunc("GET /api/v1/hosts", s.listHosts)
+	api.HandleFunc("GET /api/v1/hosts/options", s.hostOptions)
 	api.HandleFunc("POST /api/v1/hosts", s.createHost)
 	api.HandleFunc("PATCH /api/v1/hosts/{id}", s.updateHost)
 	api.HandleFunc("DELETE /api/v1/hosts/{id}", s.deleteHost)

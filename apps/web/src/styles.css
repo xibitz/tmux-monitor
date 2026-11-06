@@ -208,6 +208,10 @@ p {
   flex-shrink: 0;
   margin-top: 2px;
 }
+
+.info-notice code {
+  overflow-wrap: anywhere;
+}
 .splash {
   min-height: 100dvh;
   display: flex;

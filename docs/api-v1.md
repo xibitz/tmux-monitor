@@ -14,6 +14,7 @@ All timestamps use RFC 3339 UTC. All responses under `/api` and `/ws` use
 | `GET /api/v1/me` | Session | `{user:{id,username,isAdmin},csrfToken}` |
 | `POST /api/v1/auth/logout` | Session + CSRF | 204; revoke session and expire cookie |
 | `GET /api/v1/hosts` | Session, filtered by host permissions | `{hosts:[Host]}` |
+| `GET /api/v1/hosts/options` | Admin | `{allowedSSHHosts:[string]}`; sorted exact addresses approved in hub configuration, empty array if none; does not test connections |
 | `POST /api/v1/hosts` | Admin + CSRF | `HostInput` → 201 `Host`; creates configuration only |
 | `PATCH /api/v1/hosts/{id}` | Admin + CSRF | Full `HostInput` → `Host`; future connector configuration is immutable in this milestone |
 | `DELETE /api/v1/hosts/{id}` | Admin + CSRF | 204; deletes profile only, never touches tmux |

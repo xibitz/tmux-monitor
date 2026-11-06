@@ -1,5 +1,6 @@
 export type User = { id: string; username: string; isAdmin: boolean };
 export type Identity = { user: User; csrfToken: string };
+export type HostOptions = { allowedSSHHosts: string[] };
 export type HostInput = {
   label: string;
   transport: "ssh" | "agent";

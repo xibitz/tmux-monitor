@@ -69,6 +69,30 @@ Jangan gunakan Funnel. Hub menolak listener selain `127.0.0.1`; cookie produksi
 selalu Secure. Contoh ini belum membuktikan konfigurasi Grants atau akses dari HP
 di instalasi Anda. [Dokumentasi Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve).
 
+## Jika alamat SSH ditolak
+
+Pesan "Alamat SSH belum diizinkan" berarti alamat yang diketik belum tercantum
+di `TMUX_MONITOR_ALLOWED_SSH_HOSTS` pada proses hub yang sedang berjalan.
+Menambah profil memerlukan akun admin; daftar alamatnya tetap dikelola melalui
+konfigurasi hub. Formulir menampilkan saran dari daftar tersebut. Jika kosong,
+formulir memberi petunjuk konfigurasi sebelum profil SSH dapat disimpan.
+
+Hentikan hub, lalu mulai ulang dengan alamat Tailscale yang ingin digunakan:
+
+```sh
+# Ganti kedua alamat contoh ini dengan alamat host Anda.
+TMUX_MONITOR_ALLOWED_SSH_HOSTS=100.100.100.10,laptop.your-tailnet.ts.net make dev
+```
+
+Untuk menjalankan binary langsung, tetapkan variabel tersebut bersama
+`TMUX_MONITOR_ORIGIN` dan pengaturan lain pada perintah `./bin/hub serve`.
+Jika memakai service manager, tambahkan variabel pada konfigurasi service lalu
+restart. Nama DNS dan IP diperiksa sebagai alamat terpisah; jika keduanya akan
+dipakai, cantumkan keduanya, dipisahkan koma. Spasi di tepi dan kapitalisasi nama
+DNS dinormalisasi. File `.env`/`.env.example` tidak dibaca otomatis; menulis nilai
+di sana saja belum mengubah konfigurasi proses. Muat ulang halaman/formulir
+setelah hub dimulai ulang agar saran alamat diperbarui.
+
 ## Pemeriksaan
 
 ```sh

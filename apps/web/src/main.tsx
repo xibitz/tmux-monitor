@@ -27,7 +27,7 @@ import {
   X,
 } from "lucide-react";
 import { api, APIError, configureSession } from "./api";
-import type { AuditEvent, Host, HostInput, Identity } from "./api";
+import type { AuditEvent, Host, HostInput, HostOptions, Identity } from "./api";
 import "./styles.css";
 
 function App() {
@@ -808,8 +808,29 @@ function HostForm({
   const [transport, setTransport] = useState<"ssh" | "agent">("ssh");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [options, setOptions] = useState<HostOptions>();
+  const [optionsError, setOptionsError] = useState("");
+  const [optionsAttempt, setOptionsAttempt] = useState(0);
+  const [address, setAddress] = useState("");
+  useEffect(() => {
+    let active = true;
+    setOptionsError("");
+    api<HostOptions>("/hosts/options")
+      .then((result) => {
+        if (active) setOptions(result);
+      })
+      .catch((error: Error) => {
+        if (active) setOptionsError(error.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [optionsAttempt]);
+  const addressAllowed =
+    options?.allowedSSHHosts.includes(address.trim().toLowerCase()) ?? false;
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (transport === "ssh" && !addressAllowed) return;
     const data = new FormData(event.currentTarget);
     const body: HostInput = {
       label: String(data.get("label")),
@@ -874,19 +895,64 @@ function HostForm({
           </div>
         </fieldset>
         {transport === "ssh" && (
-          <label>
-            Alamat tailnet
-            <input
-              name="address"
-              required
-              placeholder="laptop.tailnet.ts.net"
-              maxLength={253}
-              spellCheck={false}
-            />
-            <span className="field-help">
-              Alamat harus sudah diizinkan dalam konfigurasi hub.
-            </span>
-          </label>
+          <>
+            {optionsError ? (
+              <div className="error-notice" role="alert">
+                <span>{optionsError}</span>
+                <button
+                  type="button"
+                  className="button secondary"
+                  onClick={() => setOptionsAttempt((current) => current + 1)}
+                >
+                  Coba lagi
+                </button>
+              </div>
+            ) : !options ? (
+              <div className="info-notice" role="status">
+                <LoaderCircle size={16} className="spin" />
+                Memuat alamat SSH yang diizinkan…
+              </div>
+            ) : options.allowedSSHHosts.length === 0 ? (
+              <div className="info-notice" role="status">
+                <CircleHelp size={16} />
+                <span>
+                  Belum ada alamat SSH yang diizinkan. Tambahkan alamat
+                  Tailscale host ke <code>TMUX_MONITOR_ALLOWED_SSH_HOSTS</code>{" "}
+                  pada konfigurasi hub, lalu mulai ulang hub. File{" "}
+                  <code>.env</code> tidak dimuat otomatis.
+                </span>
+              </div>
+            ) : null}
+            <label>
+              Alamat tailnet
+              <input
+                name="address"
+                required
+                placeholder="laptop.tailnet.ts.net"
+                maxLength={253}
+                spellCheck={false}
+                autoCapitalize="none"
+                autoCorrect="off"
+                list="allowed-ssh-addresses"
+                value={address}
+                onChange={(event) => setAddress(event.target.value)}
+                disabled={!options || options.allowedSSHHosts.length === 0}
+                aria-describedby="ssh-address-help"
+              />
+              <datalist id="allowed-ssh-addresses">
+                {options?.allowedSSHHosts.map((host) => (
+                  <option key={host} value={host} />
+                ))}
+              </datalist>
+              <span className="field-help" id="ssh-address-help">
+                {address.trim() && options && !addressAllowed
+                  ? "Alamat belum diizinkan. Tambahkan ke TMUX_MONITOR_ALLOWED_SSH_HOSTS pada konfigurasi hub, lalu mulai ulang hub."
+                  : options && options.allowedSSHHosts.length > 0
+                    ? "Pilih alamat yang diizinkan dari saran kolom ini. Untuk alamat baru, tambahkan ke TMUX_MONITOR_ALLOWED_SSH_HOSTS pada konfigurasi hub lalu mulai ulang hub."
+                    : "Alamat IP dan nama DNS harus sesuai dengan yang diizinkan di konfigurasi hub."}
+              </span>
+            </label>
+          </>
         )}
         <div className="form-columns">
           <label>
@@ -939,7 +1005,10 @@ function HostForm({
           >
             Batal
           </button>
-          <button className="button primary" disabled={busy}>
+          <button
+            className="button primary"
+            disabled={busy || (transport === "ssh" && !addressAllowed)}
+          >
             {busy ? (
               <LoaderCircle size={17} className="spin" />
             ) : (

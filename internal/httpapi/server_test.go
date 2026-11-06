@@ -241,6 +241,35 @@ func TestDefaultDenyHostPermissions(t *testing.T) {
 	}
 }
 
+func TestHostOptionsAreAdminOnlyAndDoNotBypassAllowlist(t *testing.T) {
+	h := setup(t)
+	if r := h.request("GET", "/api/v1/hosts/options", "", false, false, ""); r.Code != 401 {
+		t.Fatalf("unauthenticated options: %d", r.Code)
+	}
+	h.server.cfg.AllowedSSHHosts = map[string]bool{"z.example.ts.net": true, "100.100.100.10": true, "disabled.example.ts.net": false}
+	r := h.request("GET", "/api/v1/hosts/options", "", true, false, "")
+	if r.Code != 200 || strings.TrimSpace(r.Body.String()) != `{"allowedSSHHosts":["100.100.100.10","z.example.ts.net"]}` || r.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("options: %d %s", r.Code, r.Body)
+	}
+	h.server.cfg.AllowedSSHHosts = nil
+	r = h.request("GET", "/api/v1/hosts/options", "", true, false, "")
+	if r.Code != 200 || strings.TrimSpace(r.Body.String()) != `{"allowedSSHHosts":[]}` {
+		t.Fatalf("empty options: %d %s", r.Code, r.Body)
+	}
+	r = h.request("POST", "/api/v1/hosts", `{"label":"Unapproved","transport":"ssh","tailnetAddress":"100.100.100.10","osUser":"dev"}`, true, true, h.csrf)
+	if r.Code != 422 || !strings.Contains(r.Body.String(), "TMUX_MONITOR_ALLOWED_SSH_HOSTS") {
+		t.Fatalf("missing actionable allowlist rejection: %d %s", r.Code, r.Body)
+	}
+	if _, err := h.db.Exec("UPDATE users SET is_admin=0"); err != nil {
+		t.Fatal(err)
+	}
+	h.server.cfg.AllowedSSHHosts = map[string]bool{"private.example.ts.net": true}
+	r = h.request("GET", "/api/v1/hosts/options", "", true, false, "")
+	if r.Code != 403 || strings.Contains(r.Body.String(), "private.example.ts.net") {
+		t.Fatalf("non-admin options leaked: %d %s", r.Code, r.Body)
+	}
+}
+
 func TestAuditFailureRollsBackHostMutation(t *testing.T) {
 	h := setup(t)
 	if _, err := h.db.Exec("CREATE TRIGGER fail_audit BEFORE INSERT ON audit_events BEGIN SELECT RAISE(FAIL,'blocked'); END"); err != nil {

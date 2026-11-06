@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -58,7 +59,7 @@ func (s *Server) validateHost(in *HostInput) string {
 			return "Alamat host SSH tidak valid."
 		}
 		if !s.cfg.AllowedSSHHosts[in.TailnetAddress] {
-			return "Alamat SSH belum ada dalam daftar host yang diizinkan admin."
+			return "Alamat SSH belum diizinkan. Tambahkan alamat ini ke TMUX_MONITOR_ALLOWED_SSH_HOSTS pada konfigurasi hub, lalu mulai ulang hub."
 		}
 	case "agent":
 		if in.TailnetAddress != "" {
@@ -68,6 +69,20 @@ func (s *Server) validateHost(in *HostInput) string {
 		return "Transport harus ssh atau agent."
 	}
 	return ""
+}
+
+func (s *Server) hostOptions(w http.ResponseWriter, r *http.Request) {
+	if !s.admin(w, r) {
+		return
+	}
+	addresses := []string{}
+	for address, allowed := range s.cfg.AllowedSSHHosts {
+		if allowed {
+			addresses = append(addresses, address)
+		}
+	}
+	sort.Strings(addresses)
+	s.json(w, http.StatusOK, map[string]any{"allowedSSHHosts": addresses})
 }
 
 const hostColumns = "id,label,transport,tailnet_address,os_user,socket_name,environment,created_at,updated_at"
