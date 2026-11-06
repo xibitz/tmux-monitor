@@ -1,0 +1,9 @@
+.DS_Store
+.env
+/.data/
+/bin/
+/coverage.out
+/apps/web/node_modules/
+/apps/web/*.tsbuildinfo
+/internal/webassets/dist/*
+!/internal/webassets/dist/.gitkeep
