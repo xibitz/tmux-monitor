@@ -14,15 +14,20 @@ Pengguna meminta development diteruskan dan status ditulis agar agent baru bisa
 melanjutkan tanpa mengandalkan riwayat chat. **Memory ini wajib diperbarui setelah
 checkpoint, sebelum berhenti, dan sebelum context/token habis.**
 
-Baseline yang sudah ada: hub localhost-only, SQLite WAL, migrasi 001/002, bootstrap
-admin, Argon2id, cookie sesi, ACL, CSRF/Origin, profil host, audit, UI responsif,
-petunjuk allowlist SSH, Makefile dan CI. Commit baseline terakhir sebelum
-checkpoint ini: `1d8c1cf` (sebelumnya `5c99762`, fondasi; `a879f8c`, rancangan).
+Yang sudah tersedia: hub localhost-only, SQLite WAL/migrasi 001–002, bootstrap
+admin, Argon2id/cookie sesi, ACL/CSRF/Origin, profil host, audit, UI responsif,
+allowlist SSH, Makefile/CI, **key store + CLI SSH configure/revoke, public host
+key pinning, probe dan inventaris tmux dengan epoch/revision serta cache stale**.
 
-**Pekerjaan aktif: T10 konektor SSH, lalu T11 inventaris.** Saat memory ini dibuat,
-fondasi SSH sedang dikodekan; Agent dan terminal belum tersedia. Jangan menandai seluruh M1 selesai hanya
-karena profil berhasil disimpan. T12 terminal dan T13 reconnect adalah gate
-tersendiri. Semua task P0 yang belum selesai tetap wajib sebelum rilis aman.
+Checkpoint kode terbaru: `33466f0` (SSH/inventaris); dokumentasi awal handoff:
+`b7b8c1c`. Sebelumnya `1d8c1cf` (UX allowlist), `5c99762` (fondasi), `a879f8c`
+(rancangan). Commit dokumentasi sesudah kode tidak mengubah implementasinya.
+
+**T00, T10, T11 DONE. T02/T03/T32 PARTIAL. Task lain TODO. Berikutnya T12.**
+DONE pada T10/T11 berarti acceptance kode/automated tests yang dicatat telah
+lulus, bukan bukti sshd/tailnet/HP pengguna sudah diuji. Terminal dan Agent belum
+tersedia; M1 dan gate rilis P0 belum selesai. Jangan aktifkan terminal sebelum
+kebijakan ukuran dan gate akses dipenuhi.
 
 ## Tasklist dan langkah implementasi
 
@@ -34,13 +39,12 @@ Kotak task hanya dicentang setelah gate task tersebut benar-benar selesai.
 1. **Fondasi (T00–T03).** Pertahankan fondasi yang sudah ada. Lengkapi matriks
    Linux/macOS dan perangkat nyata, uji Serve/Grants negatif, serta spike ukuran
    tmux. T00 selesai, T01 terbuka, T02/T03 sebagian. Lihat ADR 0001.
-2. **SSH onboarding (T10).** Tetapkan kontrak; tambahkan migrasi credential
-   reference dan cache observasi; konfigurasi private key melalui CLI lokal;
-   pin host key yang sudah diverifikasi; batasi dial ke alamat tailnet dalam
-   allowlist; tambahkan probe dengan timeout, batas output, audit dan UI.
-3. **Inventaris (T11).** Buat katalog perintah tmux tetap dan parser format yang
-   aman, native IDs, epoch/fingerprint dan metadata revision; ambil snapshot
-   konsisten; simpan cache bertimestamp dan tampilkan stale ketika gagal.
+2. **SSH onboarding (T10, DONE).** Kontrak/migrasi credential reference, cache,
+   CLI key dan public pin, guard alamat, probe bounded, audit dan UI sudah
+   diimplementasikan dan diuji. Proses onboarding operator ada di README.md.
+3. **Inventaris (T11, DONE).** Katalog perintah tmux tetap dan parser format yang
+   aman, native IDs, epoch/fingerprint dan metadata revision; snapshot
+   diverifikasi dan cache bertimestamp dengan stale saat gagal sudah tersedia.
    Host yang dapat dihubungi tetapi tidak punya server tmux bukan host mati.
 4. **Terminal SSH (T12–T13).** Selesaikan kebijakan ukuran tanpa desktop, baru
    buat PTY, upgrade WebSocket terautentikasi, framing/version/nonce, buffer
@@ -120,49 +124,103 @@ Hot reload hanya frontend; backend Go harus di-restart setelah perubahan.
 HTTPS Tailscale + DEV=true belum didukung konfigurasi sekarang. Untuk produksi,
 pakai binary, origin HTTPS dan DEV=false; jangan melemahkan Origin check.
 
-## Bukti yang sudah tersedia
+## Bukti verifikasi dan batasnya
 
-- Baseline: `make check`, `go test -race ./...`, `make build`, cross-compile
-  Linux tanpa CGO dan uji browser login/profil/audit/logout lulus.
-- CI baseline: [run 42185850979](https://github.com/xibitz/tmux-monitor/actions/runs/42185850979), success.
-- Perbaikan allowlist: [run 42190573684](https://github.com/xibitz/tmux-monitor/actions/runs/42190573684), success.
-- `python3 scripts/tmux-spike.py`: tmux 3.8 macOS, desktop biasa + viewer
-  read-only/ignore-size mempertahankan ukuran; disconnect viewer tidak membunuh
-  session. Jika semua klien memakai ignore-size, asumsi ukuran tidak berlaku.
-  Rincian dan gate terbuka ada di `docs/adr/0001-tmux-client-spike.md`.
-- Belum ada bukti SSH ke host nyata, uji Linux tmux, Agent, HP Android/iOS,
-  atau gate rilis terminal P0. Tidak ada data/key pengguna yang dijadikan fixture.
-
-## Checkpoint aktif untuk agent berikutnya
-
-- Dokumentasi awal telah di-commit sebagai `b7b8c1c`; tabel per-task dan aturan
-  tersedia. Kode T10/T11 sudah selesai dan diuji lokal; status tetap PARTIAL di
-  implementation plan sampai CI Linux checkpoint ini diverifikasi.
-- File inti: migration `002_ssh_observation`, `internal/connector/ssh/` (store,
-  pin/auth, timeout, tailnet address check), `internal/tmux/inventory.go` (katalog
-  command/parser/epoch/revision), `internal/httpapi/ssh.go` (probe/cache/audit),
-  CLI di `cmd/hub/main.go`, UI detail/inventaris di `apps/web/src/main.tsx`.
-- Lulus lokal: `make check test build`, race tests, SSH protocol server dengan
-  key sementara, tmux nyata pada socket terisolasi (no server, server tanpa
-  session, rename, split, close window, restart), pin mismatch dan multi-key,
-  RSA SHA2, output limit, cancellation, ACL/CSRF, stale cache, revoke-in-flight,
-  corrupt/cross-host cache, rollback 002 yang mempertahankan data 001.
+- Kode `33466f0`: [CI Linux sukses 42206312482](https://github.com/xibitz/tmux-monitor/actions/runs/42206312482).
+  Workflow memasang tmux, menjalankan format/vet/TypeScript, `go test -race ./...`,
+  build web/backend, cross-compile Linux tanpa CGO dan unggah artifact binary.
+- Lokal macOS: `make check test build` lulus; SSH protocol server dengan key
+  sementara + tmux nyata pada socket terisolasi lulus. Kasus: no server, server
+  tanpa session, rename, split, close window, restart/ID reuse, pin mismatch,
+  server multi-key, RSA SHA2, tailnet-IP guard/fallback, timeout/cancellation,
+  output limit, ACL/CSRF, stale cache, revoke-in-flight, corrupt/cross-host cache,
+  audit rollback dan migrasi 002 yang mempertahankan data 001.
 - Browser fixture lulus: login, metadata SSH, probe fresh lalu timeout/stale,
-  pohon session/window/pane, timestamp tetap pada snapshot lama; tidak ada
-  console warning/error atau overflow horizontal pada viewport 393 px.
-  Ini simulasi hasil SSH untuk UI; protokol SSH dan tmux nyata diuji terpisah.
-- Temuan yang sudah diperbaiki dan diberi regresi: embedded bytes.Buffer membuat
-  io.Copy melewati batas; tmux tanpa session menormalisasi tab dan gagal list
-  target; SSH multi-key harus dinegosiasikan sesuai key yang dipin.
-- Berikutnya sekarang: commit/push kode, lihat CI Linux (workflow memasang tmux),
-  perbaiki jika gagal, lalu tutup T10/T11 dan perbarui checkpoint ini.
-- Setelah itu: T12 sesuai langkah 4. Sebelum terminal dibuka, selesaikan kebijakan
-  ukuran tanpa desktop (ADR 0001) dan negative access gate T03. Jangan menganggap
-  validasi CIDR sudah membuktikan routing/keanggotaan Tailscale (ADR 0002).
-- Backend/data pengguna belum direstart/dimigrasi oleh agent. Sesudah upgrade,
-  pengguna perlu menghentikan backend lama, backup data penting, memuat .env,
-  dan menjalankan backend baru (migrasi 002 otomatis). CLI ssh-configure memakai
-  direktori data yang sama, key khusus hub dan fingerprint yang diverifikasi.
-  Jangan menghidupkan/mematikan proses pengguna hanya untuk smoke test.
-- Semua test memakai key/DB/socket sementara. Key, host pribadi dan .env pengguna
-  tidak dipakai atau dimasukkan Git. Terminal/Agent tetap belum tersedia.
+  pohon session/window/pane dan timestamp snapshot tetap. Pada viewport 393 px,
+  document/dialog tidak overflow horizontal; console tidak melaporkan error/warn.
+  Hasil SSH di fixture UI disimulasikan; HTTP/login/CSRF/cache nyata. Protokol
+  SSH dan tmux nyata diuji terpisah. Fixture tidak ikut binary production.
+- `scripts/tmux-spike.py` dan ADR 0001 membuktikan ukuran tetap untuk desktop
+  normal + viewer read-only/ignore-size di tmux 3.8 macOS. Jika semua klien
+  ignore-size, ukuran dapat berubah. Minimum versi dan kondisi tanpa desktop
+  masih perlu diselesaikan pada T02 sebelum T12 diaktifkan.
+- Belum ada uji ke host/key SSH pengguna, sshd host tailnet nyata, Agent,
+  HP Android/iOS, live Serve/Grants negative access atau gate terminal P0.
+  CIDR guard bukan pembuktian routing/keanggotaan Tailscale; lihat ADR 0002.
+
+## Peta kode dan keputusan yang penting
+
+- `internal/connector/ssh/credentials.go`: private key owner-only, public pin dan
+  expected fingerprint, file reference, rotasi/revoke dan audit lokal. Key tanpa
+  passphrase; password auth, ssh-agent, host certificate dan import known_hosts
+  belum tersedia. RSA hanya SHA2, algoritme pin dipilih eksplisit.
+- `internal/connector/ssh/connector.go`: resolve sekali/validasi seluruh IP lalu
+  dial langsung, maksimal empat request global/satu per host, total 10 detik,
+  3 detik per TCP attempt, stdout 1 MiB/stderr 16 KiB per command, tutup koneksi.
+- `internal/tmux/inventory.go`: katalog command read-only, quoting, q: metadata,
+  delimiter fingerprint printable, parser native IDs, epoch dan revision.
+- `internal/httpapi/ssh.go`: metadata admin-only, probe + audit, GET inventaris
+  dengan tmux:read, cache stale yang tetap memakai timestamp lama. Hasil dari
+  credential yang sudah direvoke/dirotasi tidak boleh mengisi cache kembali.
+- `internal/storage/migrations/002_ssh_observation.*.sql`: credential reference,
+  observasi dan inventory_cache. Runner migrasi mendukung nama bernomor umum.
+- `cmd/hub/main.go`: CLI `ssh-configure` / `ssh-revoke`. Detail host menampilkan
+  template command; `README.md` menjelaskan onboarding dan upgrade.
+- `apps/web/src/main.tsx`: detail metadata/probe, state observasi terakhir,
+  pohon inventaris dan label stale. Capabilities PTY/control/independentPane
+  selalu false karena fitur tersebut belum dibangun/dibuktikan.
+- `internal/httpapi/browser_fixture_test.go`: fixture browser opt-in, hanya test.
+  Jalankan sesudah `make build`:
+
+  ```sh
+  TMUX_MONITOR_BROWSER_FIXTURE=1 go test ./internal/httpapi -run '^TestBrowserFixture$' -count=1 -timeout=6m -v
+  ```
+
+  URL localhost:18081, akun/kata sandi fixture ada di server_test.go; bukan akun
+  pengguna. Probe pertama fresh, berikutnya timeout/stale. Maksimum lima menit;
+  hentikan setelah selesai. Jangan mengganti fixture dengan host/key pengguna.
+
+Temuan yang telah diperbaiki dan dilindungi regresi: embedding bytes.Buffer
+memungkinkan io.Copy melewati limit (sekarang composition); tmux tanpa session
+menormalisasi tab dan list target gagal (fingerprint printable + recheck kosong);
+negosiasi multi-key harus dipersempit ke public pin; cache salah-host/korup dan
+hasil in-flight dari credential lama tidak boleh ditampilkan sebagai fresh.
+
+## Titik lanjut tepat: T12
+
+1. Baca task T12/T13, ADR 0001/0002 dan FR-04/06/09. Pastikan git status dan
+   konfigurasi runtime aktual; jangan berasumsi proses backend memakai source
+   terbaru hanya karena Vite melakukan hot reload.
+2. Selesaikan spike ukuran tanpa desktop, beberapa window dengan ukuran berbeda,
+   dan cara mengaktifkan/menonaktifkan flag read-only pada client tmux yang tepat.
+   Tetapkan capability/minimum versi dan fallback aman; jangan membiarkan viewport
+   HP otomatis mengubah ukuran remote. Catat hasil sebelum membuka PTY.
+3. Lengkapi negative access Serve/Grants dan matriks host nyata yang tersedia.
+   Key dan public host fingerprint harus dipasang operator melalui CLI lokal.
+   Tidak ada key/izin yang boleh ditebak atau diambil dari `.ssh` secara otomatis.
+4. Tulis kontrak terminal/WS dan nonce satu pakai yang diikat ke sesi login,
+   host/socket/epoch/session serta versi protokol. Tinjau middleware `/ws/`
+   sekarang: header CSRF REST belum menjadi mekanisme upgrade browser yang siap.
+   Jangan melompati cookie/Origin/ACL untuk membuat WebSocket berhasil.
+5. Tambahkan PTY SSH, framing/sequence, limit frame/buffer/viewer, xterm.js,
+   read-only default pada gateway DAN tmux. Input/resize perlu izin eksplisit;
+   reset read-only saat reconnect/berpindah host. Jangan replay input ambigu.
+6. Buktikan close, disconnect, timeout dan restart hub hanya detach, bukan kill;
+   pencabutan sesi login/izin/key harus menutup viewer yang terkait;
+   viewer lambat tidak menahan buffer tak terbatas; OSC52/URL berbahaya tidak
+   otomatis aktif. Setelah itu barulah implementasikan interactive toggle.
+7. Jalankan contract/integration/browser/failure tests yang relevan dan CI;
+   perbarui MEMORY.md + tabel/checkbox. T12/T13 tetap TODO sampai gate terpenuhi.
+
+## Upgrade runtime setelah checkpoint ini
+
+Backend pengguna tidak direstart atau dimigrasi oleh agent pada pekerjaan ini.
+Untuk memakai source terbaru: hentikan backend lama, backup data penting, muat
+.env di terminal backend, lalu jalankan kembali `make dev` (atau build/binary
+baru). Startup menjalankan migrasi 002 secara otomatis dan mempertahankan data
+001. CLI SSH harus memakai TMUX_MONITOR_DATA_DIR yang sama. Frontend Vite tetap
+pada 5173; backend 8080 untuk konfigurasi dev yang sekarang didokumentasikan.
+
+Tidak ada terminal/Agent yang sudah siap. Tidak ada proses tmux/host pengguna
+atau credential nyata yang dipakai selama pengujian. Temp browser fixture sudah
+dihentikan; proses pengembangan pengguna dibiarkan berjalan untuk mereka restart.

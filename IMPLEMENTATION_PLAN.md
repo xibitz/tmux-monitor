@@ -17,8 +17,8 @@ pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus
 | T01 | TODO | Matriks host Linux/Agent dan HP Android/iOS nyata belum disiapkan. |
 | T02 | PARTIAL | Spike tmux 3.8 macOS dan ADR 0001 tersedia; matriks versi, minimum versi, output burst dan ukuran tanpa desktop belum tuntas. |
 | T03 | PARTIAL | Login/ACL/CSRF/Origin/audit dan localhost-only diuji; live Serve/Grants negative tests belum. |
-| T10 | PARTIAL | Kode onboarding key lokal, pin host key, pembatas jaringan, probe/API/UI selesai dan uji lokal lulus; verifikasi CI Linux checkpoint ini sedang disiapkan. |
-| T11 | PARTIAL | Parser, native IDs/epoch/revision, snapshot SSH dan cache stale selesai; integrasi SSH + tmux terisolasi macOS lulus, CI Linux menunggu. |
+| T10 | DONE | Key store/CLI configure-revoke, pin dan algoritme host key, tailnet address guard, bounded probe/API/UI; uji lokal dan CI Linux lulus. Uji tailnet nyata tetap T01/T03. |
+| T11 | DONE | Parser/epoch/revision, SSH snapshot, cache stale/revoke dan UI; uji tmux nyata terisolasi di macOS serta CI Linux lulus (empty/rename/split/kill/restart). |
 | T12 | TODO | PTY SSH, WebSocket, xterm.js, read-only/interactive, bounded buffers. |
 | T13 | TODO | Reconnect, status SSH, no replay dan error taxonomy terminal. |
 | T20 | TODO | Mutasi session dengan epoch/revision, idempotency, konfirmasi/audit. |
@@ -51,8 +51,14 @@ pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus
 - [x] UI konfigurasi/probe dan pohon session/window/pane; terminal tetap gated.
 - [x] Uji key salah, credential hilang/revoke, input/command injection, timeout,
   ACL/CSRF, output malformed/berlebih, cache stale dan tmux restart.
-- [ ] Uji SSH + tmux pada host/perangkat matriks yang benar-benar tersedia.
-- [ ] Checkpoint: format/vet/TypeScript/race/build/CI; update memory dan status.
+- [x] Uji SSH + tmux nyata pada socket test terisolasi di macOS dan CI Linux.
+- [ ] Uji SSH/sshd pada host tailnet dan HP nyata (gate T01/T03, belum diklaim).
+- [x] Checkpoint: format/vet/TypeScript/race/build/CI; update memory dan status.
+
+Bukti kode checkpoint `33466f0`: [CI Linux sukses](https://github.com/xibitz/tmux-monitor/actions/runs/42206312482).
+T12 adalah task implementasi berikutnya; gate ukuran/akses T02/T03 tetap harus
+dipenuhi sebelum terminal dipakai pada host nyata. T10/T11 DONE tidak berarti M1
+atau rilis P0 sudah selesai.
 
 ## 1. Hasil akhir dan urutan rilis
 
@@ -233,8 +239,8 @@ Setiap task menghasilkan kode, dokumentasi singkat, dan bukti gate yang relevan.
 
 ### M1 — SSH vertical slice (P0; setelah T02–T03)
 
-- [ ] **T10** Registri SSH, credential ref, onboarding host key dengan verifikasi out-of-band, probe capability/health. **Selesai:** host salah key ditolak dan tidak ada key di respons/log.
-- [ ] **T11** Parser inventaris tmux dengan `-F` format terstruktur dan native IDs; epoch `pid/start_time/socket_path`; cache stale. **Selesai:** inventaris akurat pada empty server, rename, kill eksternal, restart tmux.
+- [x] **T10** Registri SSH, credential ref, onboarding host key dengan verifikasi out-of-band, probe capability/health. **Selesai:** host salah key ditolak dan tidak ada key di respons/log.
+- [x] **T11** Parser inventaris tmux dengan `-F` format terstruktur dan native IDs; epoch `pid/start_time/socket_path`; cache stale. **Selesai:** inventaris akurat pada empty server, rename, kill eksternal, restart tmux.
 - [ ] **T12** PTY SSH session attach, WS gateway, xterm.js viewer read-only, interactive toggle, input Unicode/control keys, bounded buffer. **Selesai:** HP dapat membuka sesi tanpa mengubah ukuran desktop; close viewer tidak membunuh proses.
 - [ ] **T13** Reconnect terminal dan status host SSH; no replay input; error taxonomy. **Selesai:** pindah jaringan dan hub restart menampilkan state yang benar.
 
@@ -252,7 +258,7 @@ Setiap task menghasilkan kode, dokumentasi singkat, dan bukti gate yang relevan.
 - [ ] **T31** Keyboard toolbar, modifier state, copy/paste, hardware keyboard, touch accessibility, indikator host/mode. **Selesai:** matriks tombol dan screen-reader UI non-terminal lulus.
 - [ ] **T32** Audit viewer/admin, filter, retensi, redaction; security review dan fuzz input protokol. **Selesai:** sampel log tidak memuat secret/output/input terminal.
 - [ ] **T33** Packaging hub systemd, agent systemd/launchd, backup/restore SQLite+secret, rollback migration, runbook rotasi/revoke dan pemulihan. **Selesai:** clean install dan restore pada mesin uji lulus.
-- [ ] **T34** End-to-end failure matrix dan kapasitas awal. **Selesai:** seluruh gate P0 di §8 lulus; batas/target disetel menurut pengukuran.
+- [ ] **T34** End-to-end failure matrix dan kapasitas awal. **Selesai:** seluruh gate P0 di §7 lulus; batas/target disetel menurut pengukuran.
 
 ### M4 — Event bridge dan pane independen (P1; setelah T02, T24, T34)
 
