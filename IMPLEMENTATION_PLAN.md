@@ -4,6 +4,56 @@
 **Rujukan kebutuhan:** [PRD.md](PRD.md)  
 **Strategi:** irisan vertikal yang dapat diuji pada SSH dahulu, lalu paritas Agent, manajemen lengkap, control mode, dan notifikasi. P0 tidak dianggap siap dipakai pada host penting sebelum gate keamanan dan keselamatan lulus.
 
+## Pelacakan pekerjaan aktual
+
+Diperbarui 6 November 2026. Baca [MEMORY.md](MEMORY.md) untuk langkah implementasi,
+aturan, hasil verifikasi, dan titik lanjut agent. Tabel ini mencatat status aktual;
+kata **Selesai** pada deskripsi task di bawah berarti *kriteria penerimaan*, bukan
+pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus.
+
+| Task | Status | Sudah tersedia / yang masih harus dikerjakan |
+|---|---|---|
+| T00 | DONE | Struktur Go/React, build, CI, konfigurasi contoh, migrasi 001 naik/turun, health. CI Linux dan uji lokal lulus. |
+| T01 | TODO | Matriks host Linux/Agent dan HP Android/iOS nyata belum disiapkan. |
+| T02 | PARTIAL | Spike tmux 3.8 macOS dan ADR 0001 tersedia; matriks versi, minimum versi, output burst dan ukuran tanpa desktop belum tuntas. |
+| T03 | PARTIAL | Login/ACL/CSRF/Origin/audit dan localhost-only diuji; live Serve/Grants negative tests belum. |
+| T10 | IN_PROGRESS | Profil CRUD, allowlist dan saran alamat tersedia; credential store, host key pinning, SSH probe sedang dikerjakan. |
+| T11 | TODO | Parser inventaris, epoch dan cache stale menyusul setelah fondasi konektor SSH. |
+| T12 | TODO | PTY SSH, WebSocket, xterm.js, read-only/interactive, bounded buffers. |
+| T13 | TODO | Reconnect, status SSH, no replay dan error taxonomy terminal. |
+| T20 | TODO | Mutasi session dengan epoch/revision, idempotency, konfirmasi/audit. |
+| T21 | TODO | Mutasi window/pane, snapshot pane dan suite dua transport. |
+| T22 | TODO | Enrollment/revoke Agent, credential, handshake/generation dan RPC. |
+| T23 | TODO | PTY Agent dan paritas mode terminal. |
+| T24 | TODO | Heartbeat, reconnect/jitter, capability refresh dan rekonsiliasi. |
+| T30 | TODO | Manifest/PWA/service worker asset-only, standalone dan uji perangkat. |
+| T31 | TODO | Toolbar keyboard/paste/hardware keyboard dan aksesibilitas; baru ada UI responsif dasar. |
+| T32 | PARTIAL | Audit dasar dan redaction tests tersedia; filter/retensi/security review/fuzz belum. |
+| T33 | TODO | Packaging service, backup/restore, rollback runbook dan rotasi/revoke. |
+| T34 | TODO | Failure matrix dua transport dan kapasitas; gate rilis P0 belum lulus. |
+| T40 | TODO | Parser control mode state machine, fixture dan fuzz. |
+| T41 | TODO | Event bridge dua transport, sequence/resync dan polling fallback. |
+| T42 | TODO | Live pane independen dan pembuktian isolasi klien/ukuran. |
+| T50 | TODO | Skema notifikasi, mapping/confidence/dedupe dan inbox. |
+| T51 | TODO | Hook lokal Codex/Claude berversi dan autentikasi ke Agent. |
+| T52 | TODO | Notifikasi in-app dan Web Push opt-in tanpa isi sensitif. |
+| T60 | TODO | Tab/favorit/pencarian dan tuning berbasis benchmark. |
+
+### Checklist irisan aktif T10–T11
+
+- [x] Registri profil dan allowlist admin; opsi alamat dan petunjuk pada UI.
+- [ ] Kontrak onboarding credential lokal dan metadata/probe API.
+- [ ] Migrasi 002 credential reference dan cache observasi yang dapat di-rollback.
+- [ ] Penyimpanan key/known_hosts aman; CLI configure/revoke, tanpa secret API.
+- [ ] SSH auth, host key pinning, batas jaringan tailnet, timeout dan output.
+- [ ] Katalog perintah tmux dan parser inventaris native IDs/epoch/revision.
+- [ ] Probe/inventaris terotorisasi, audit, status dan cache stale yang jujur.
+- [ ] UI konfigurasi/probe dan pohon session/window/pane; terminal tetap gated.
+- [ ] Uji key salah, credential hilang/revoke, input/command injection, timeout,
+  ACL/CSRF, output malformed/berlebih, cache stale dan tmux restart.
+- [ ] Uji SSH + tmux pada host/perangkat matriks yang benar-benar tersedia.
+- [ ] Checkpoint: format/vet/TypeScript/race/build/CI; update memory dan status.
+
 ## 1. Hasil akhir dan urutan rilis
 
 | Tahap | Prioritas | Hasil yang dapat didemokan | Gate keluar |
@@ -176,49 +226,49 @@ Setiap task menghasilkan kode, dokumentasi singkat, dan bukti gate yang relevan.
 
 ### M0 — Fondasi (P0)
 
-- **T00** Tetapkan repo, lint/format, CI, konfigurasi contoh, migration runner, health endpoint lokal, build reproducible Go+PWA. **Selesai:** build bersih dan migration upgrade/rollback dasar lulus.
-- **T01** Buat lingkungan uji: hub, satu SSH host Linux, satu host Agent Linux/macOS, tmux versi target, HP Android/iOS nyata. Catat versi tmux, OS, browser. **Selesai:** matriks dapat diulang.
-- **T02** Spike tmux multi-klien: `attach-session` read-only/ignore-size, output burst, ukuran desktop saat HP attach, per-window/pane selection, server epoch, control mode basic. **Selesai:** ADR perilaku dan minimum versi yang akan didukung; kegagalan memblokir fitur yang bergantung padanya.
-- **T03** Pasang Serve/Grants contoh, hub localhost-only, login+cookie/CSRF/Origin, user/permission model, audit skeleton. **Selesai:** negative access tests lulus sebelum terminal dibuka.
+- [x] **T00** Tetapkan repo, lint/format, CI, konfigurasi contoh, migration runner, health endpoint lokal, build reproducible Go+PWA. **Selesai:** build bersih dan migration upgrade/rollback dasar lulus.
+- [ ] **T01** Buat lingkungan uji: hub, satu SSH host Linux, satu host Agent Linux/macOS, tmux versi target, HP Android/iOS nyata. Catat versi tmux, OS, browser. **Selesai:** matriks dapat diulang.
+- [ ] **T02** Spike tmux multi-klien: `attach-session` read-only/ignore-size, output burst, ukuran desktop saat HP attach, per-window/pane selection, server epoch, control mode basic. **Selesai:** ADR perilaku dan minimum versi yang akan didukung; kegagalan memblokir fitur yang bergantung padanya.
+- [ ] **T03** Pasang Serve/Grants contoh, hub localhost-only, login+cookie/CSRF/Origin, user/permission model, audit skeleton. **Selesai:** negative access tests lulus sebelum terminal dibuka.
 
 ### M1 — SSH vertical slice (P0; setelah T02–T03)
 
-- **T10** Registri SSH, credential ref, onboarding host key dengan verifikasi out-of-band, probe capability/health. **Selesai:** host salah key ditolak dan tidak ada key di respons/log.
-- **T11** Parser inventaris tmux dengan `-F` format terstruktur dan native IDs; epoch `pid/start_time/socket_path`; cache stale. **Selesai:** inventaris akurat pada empty server, rename, kill eksternal, restart tmux.
-- **T12** PTY SSH session attach, WS gateway, xterm.js viewer read-only, interactive toggle, input Unicode/control keys, bounded buffer. **Selesai:** HP dapat membuka sesi tanpa mengubah ukuran desktop; close viewer tidak membunuh proses.
-- **T13** Reconnect terminal dan status host SSH; no replay input; error taxonomy. **Selesai:** pindah jaringan dan hub restart menampilkan state yang benar.
+- [ ] **T10** Registri SSH, credential ref, onboarding host key dengan verifikasi out-of-band, probe capability/health. **Selesai:** host salah key ditolak dan tidak ada key di respons/log.
+- [ ] **T11** Parser inventaris tmux dengan `-F` format terstruktur dan native IDs; epoch `pid/start_time/socket_path`; cache stale. **Selesai:** inventaris akurat pada empty server, rename, kill eksternal, restart tmux.
+- [ ] **T12** PTY SSH session attach, WS gateway, xterm.js viewer read-only, interactive toggle, input Unicode/control keys, bounded buffer. **Selesai:** HP dapat membuka sesi tanpa mengubah ukuran desktop; close viewer tidak membunuh proses.
+- [ ] **T13** Reconnect terminal dan status host SSH; no replay input; error taxonomy. **Selesai:** pindah jaringan dan hub restart menampilkan state yang benar.
 
 ### M2 — Manajemen dan Agent (P0; setelah T11–T12)
 
-- **T20** Operasi session create/rename/kill dengan precondition, idempotency, confirm dan audit. **Selesai:** perubahan eksternal menghasilkan conflict, bukan salah target.
-- **T21** Operasi window create/rename/kill dan pane split/kill; snapshot pane bounded; label dampak shared layout. **Selesai:** dua transport menjalankan contract suite yang sama.
-- **T22** Agent enrollment/revoke, credential unik, WS generation/version handshake, allowlisted RPC. **Selesai:** token reuse/agent revoked ditolak.
-- **T23** PTY Agent, terminal framing yang sama, read-only/interactive parity. **Selesai:** suite T12 lulus pada Agent.
-- **T24** Heartbeat, timeout, reconnect+jitter, capability refresh, inventory reconciliation. **Selesai:** sleep/wake dan koneksi ganda tidak menciptakan status ganda.
+- [ ] **T20** Operasi session create/rename/kill dengan precondition, idempotency, confirm dan audit. **Selesai:** perubahan eksternal menghasilkan conflict, bukan salah target.
+- [ ] **T21** Operasi window create/rename/kill dan pane split/kill; snapshot pane bounded; label dampak shared layout. **Selesai:** dua transport menjalankan contract suite yang sama.
+- [ ] **T22** Agent enrollment/revoke, credential unik, WS generation/version handshake, allowlisted RPC. **Selesai:** token reuse/agent revoked ditolak.
+- [ ] **T23** PTY Agent, terminal framing yang sama, read-only/interactive parity. **Selesai:** suite T12 lulus pada Agent.
+- [ ] **T24** Heartbeat, timeout, reconnect+jitter, capability refresh, inventory reconciliation. **Selesai:** sleep/wake dan koneksi ganda tidak menciptakan status ganda.
 
 ### M3 — Mobile dan rilis aman (P0; setelah M2)
 
-- **T30** PWA manifest, install, shell cache statis, standalone/landscape, safe-area, offline/reconnect screen. **Selesai:** Android/iOS uji membuka PWA terpasang; API/output tidak di-cache.
-- **T31** Keyboard toolbar, modifier state, copy/paste, hardware keyboard, touch accessibility, indikator host/mode. **Selesai:** matriks tombol dan screen-reader UI non-terminal lulus.
-- **T32** Audit viewer/admin, filter, retensi, redaction; security review dan fuzz input protokol. **Selesai:** sampel log tidak memuat secret/output/input terminal.
-- **T33** Packaging hub systemd, agent systemd/launchd, backup/restore SQLite+secret, rollback migration, runbook rotasi/revoke dan pemulihan. **Selesai:** clean install dan restore pada mesin uji lulus.
-- **T34** End-to-end failure matrix dan kapasitas awal. **Selesai:** seluruh gate P0 di §8 lulus; batas/target disetel menurut pengukuran.
+- [ ] **T30** PWA manifest, install, shell cache statis, standalone/landscape, safe-area, offline/reconnect screen. **Selesai:** Android/iOS uji membuka PWA terpasang; API/output tidak di-cache.
+- [ ] **T31** Keyboard toolbar, modifier state, copy/paste, hardware keyboard, touch accessibility, indikator host/mode. **Selesai:** matriks tombol dan screen-reader UI non-terminal lulus.
+- [ ] **T32** Audit viewer/admin, filter, retensi, redaction; security review dan fuzz input protokol. **Selesai:** sampel log tidak memuat secret/output/input terminal.
+- [ ] **T33** Packaging hub systemd, agent systemd/launchd, backup/restore SQLite+secret, rollback migration, runbook rotasi/revoke dan pemulihan. **Selesai:** clean install dan restore pada mesin uji lulus.
+- [ ] **T34** End-to-end failure matrix dan kapasitas awal. **Selesai:** seluruh gate P0 di §8 lulus; batas/target disetel menurut pengukuran.
 
 ### M4 — Event bridge dan pane independen (P1; setelah T02, T24, T34)
 
-- **T40** Parser control mode sebagai state machine dengan fixture dan fuzz untuk interleaving, escaping, `%error`, output parsial. **Selesai:** tidak ada desinkronisasi pada fixture/generasi acak.
-- **T41** Adapter event SSH dan Agent, sequence, resume/resync, polling fallback. **Selesai:** perubahan eksternal muncul di UI dan gap memicu snapshot ulang.
-- **T42** Live pane spesifik, selection per viewer dan kebijakan resize berdasar capability; uji dua klien. **Selesai:** desktop tidak berubah saat HP hanya menjelajah, atau fitur dinonaktifkan dengan alasan yang jelas.
+- [ ] **T40** Parser control mode sebagai state machine dengan fixture dan fuzz untuk interleaving, escaping, `%error`, output parsial. **Selesai:** tidak ada desinkronisasi pada fixture/generasi acak.
+- [ ] **T41** Adapter event SSH dan Agent, sequence, resume/resync, polling fallback. **Selesai:** perubahan eksternal muncul di UI dan gap memicu snapshot ulang.
+- [ ] **T42** Live pane spesifik, selection per viewer dan kebijakan resize berdasar capability; uji dua klien. **Selesai:** desktop tidak berubah saat HP hanya menjelajah, atau fitur dinonaktifkan dengan alasan yang jelas.
 
 ### M5 — Notifikasi coding agent (P1; setelah T24, T41)
 
-- **T50** Skema event internal, mapping host/session/pane, dedupe, confidence, inbox. **Selesai:** event tak terpetakan tampil sebagai unknown, bukan atribusi palsu.
-- **T51** Pengirim lokal opt-in untuk Codex `notify` dan Claude Code hooks; parser/adapter berversi, autentikasi ke Agent, penghapusan teks sensitif. **Selesai:** completion/attention/error pada versi CLI uji menghasilkan event yang tepat. [OpenAI Docs: configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference), [Claude Code hooks](https://code.claude.com/docs/en/hooks).
-- **T52** Notifikasi in-app; Web Push opt-in dengan payload umum dan feature detection. **Selesai:** izin ditolak/unsupported tetap memberi inbox; payload tidak memuat terminal text. [WebKit Web Push](https://webkit.org/blog/13878/).
+- [ ] **T50** Skema event internal, mapping host/session/pane, dedupe, confidence, inbox. **Selesai:** event tak terpetakan tampil sebagai unknown, bukan atribusi palsu.
+- [ ] **T51** Pengirim lokal opt-in untuk Codex `notify` dan Claude Code hooks; parser/adapter berversi, autentikasi ke Agent, penghapusan teks sensitif. **Selesai:** completion/attention/error pada versi CLI uji menghasilkan event yang tepat. [OpenAI Docs: configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference), [Claude Code hooks](https://code.claude.com/docs/en/hooks).
+- [ ] **T52** Notifikasi in-app; Web Push opt-in dengan payload umum dan feature detection. **Selesai:** izin ditolak/unsupported tetap memberi inbox; payload tidak memuat terminal text. [WebKit Web Push](https://webkit.org/blog/13878/).
 
 ### M6 — Penyempurnaan (P2)
 
-- **T60** Tab terminal ganda dengan batas per pengguna, favorites/filter/search, benchmark RAM/CPU/bandwidth, tuning buffer dan reconnect. **Selesai:** kapasitas terukur dan tidak ada degradasi safety.
+- [ ] **T60** Tab terminal ganda dengan batas per pengguna, favorites/filter/search, benchmark RAM/CPU/bandwidth, tuning buffer dan reconnect. **Selesai:** kapasitas terukur dan tidak ada degradasi safety.
 
 ## 7. Rencana pengujian dan gate penerimaan
 
