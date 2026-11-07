@@ -79,6 +79,11 @@ pengujian lokal dan browser fixture lulus; rincian dan langkah lanjut di MEMORY.
 - [x] Modifier/prefix T31 dan matriks byte otomatis; status/draft reset tanpa mengubah keyboard xterm.
 - [ ] Aksesibilitas lengkap dan keyboard/IME perangkat nyata T31; mutasi T20 belum dimulai.
 
+Checkpoint toolbar T31 `db29894`: [CI Ubuntu sukses](https://github.com/xibitz/tmux-monitor/actions/runs/42354512699),
+make check/test/build lokal dan browser fixture production-CSP 393x852 lulus.
+Ctrl/Alt/Shift sekali pakai, kolom kombinasi dan prefix satu control byte tersedia;
+draft/reset mode diuji. T31 tetap PARTIAL sampai gate perangkat/aksesibilitas nyata lulus.
+
 | Tahap | Prioritas | Hasil yang dapat didemokan | Gate keluar |
 |---|---:|---|---|
 | M0 — Fondasi dan spike | P0 | Tailnet privat, login, skeleton Go/PWA, percobaan tmux multi-klien | Tidak ada listener publik; perilaku tmux/resize terdokumentasi |

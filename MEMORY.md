@@ -402,7 +402,11 @@ Android/iOS nyata, IME dan screen-reader belum dikualifikasi. Langkah implementa
    `/Users/yasho/.codex/visualizations/2026/11/06/01a1afc8-c2a7-70c3-9eba-3da9aa5e9063/terminal-toolbar-mobile.jpg`.
    Tab/viewport dan fixture sudah dibersihkan. Runtime/.env/data/key/host pengguna
    tidak diubah. Bukti HP fisik/IME/tailnet nyata tetap belum ada.
-7. Commit/push SSH dan hasil CI source dicatat setelah checkpoint ini.
+7. Source **`db29894`** sudah dipush melalui SSH. **CI Ubuntu sukses**:
+   https://github.com/xibitz/tmux-monitor/actions/runs/42354512699
+   make check/test (termasuk Node toolbar), SSH+PTY/tmux 3.8, sizing spike,
+   web/hub build, static Linux/amd64 tanpa CGO dan upload artifact lulus.
+   Commit dokumentasi sesudahnya hanya merekam bukti/checkpoint ini.
 
 ## Titik lanjut tepat
 
