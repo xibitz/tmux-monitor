@@ -132,11 +132,11 @@ func (m *Manager) openTerminal(ctx context.Context, h Host, record Record, targe
 	reader := bufio.NewReaderSize(t.reader, 256)
 	line, err := reader.ReadSlice('\n')
 	if err != nil || len(line) > 128 {
-		return nil, fail("terminal_attach_failed")
+		return nil, fail("terminal_tty_unavailable")
 	}
 	t.tty = strings.TrimSuffix(strings.TrimSuffix(string(line), "\n"), "\r")
 	if !tmux.ValidTTY(t.tty) {
-		return nil, fail("terminal_attach_failed")
+		return nil, fail("terminal_tty_invalid")
 	}
 	t.reader = reader
 	t.clientCommand, _ = tmux.ClientTargetsCommand(h.Socket)

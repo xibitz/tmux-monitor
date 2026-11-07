@@ -1,6 +1,7 @@
 package sshconnector
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/binary"
@@ -166,7 +167,12 @@ func terminalServer(t *testing.T, f *fixture, env []string) string {
 								}
 								done := make(chan struct{})
 								go func() { _, _ = io.Copy(master, channel); _ = cmd.Process.Kill(); close(done) }()
-								_, _ = io.Copy(channel, master)
+								reader := bufio.NewReaderSize(master, 256)
+								identity, readErr := reader.ReadSlice('\n')
+								// Synthetic fixture metadata only; never terminal input/output.
+								t.Logf("fixture PTY identity %q, read error %v", identity, readErr)
+								_, _ = channel.Write(identity)
+								_, _ = io.Copy(channel, reader)
 								_ = cmd.Wait()
 								_ = master.Close()
 								_ = channel.Close()
