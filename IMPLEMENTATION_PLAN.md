@@ -84,7 +84,8 @@ make check/test/build lokal dan browser fixture production-CSP 393x852 lulus.
 Ctrl/Alt/Shift sekali pakai, kolom kombinasi dan prefix satu control byte tersedia;
 draft/reset mode diuji. T31 tetap PARTIAL sampai gate perangkat/aksesibilitas nyata lulus.
 
-Irisan T13 berikutnya menambah heartbeat versi protokol2 (legacy v1 tetap),
+Checkpoint T13 `dcffe28`: [CI Ubuntu sukses](https://github.com/xibitz/tmux-monitor/actions/runs/42356232678).
+Irisan ini menambah heartbeat versi protokol2 (legacy v1 tetap),
 lease browser15detik, pembatalan input/draft dan respons aktivasi terlambat.
 make check/test/build lokal, 13 kelompok uji frontend serta fixture browser
 healthy-idle/missing-heartbeat/reopen lulus. Restart instance hub dengan database

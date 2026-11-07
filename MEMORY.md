@@ -458,8 +458,12 @@ Langkah implementasi dan aturan untuk kelanjutan:
    Screenshot:
    `/Users/yasho/.codex/visualizations/2026/11/06/01a1afc8-c2a7-70c3-9eba-3da9aa5e9063/terminal-connection-timeout-mobile.jpg`.
    Ini simulasi koneksi/echo UI, bukan uji fisik offline/sleep/bfcache atau tailnet.
-8. Commit/push SSH dan CI source dicatat sesudah checkpoint. .env/data/host/key
-   dan proses pengguna tidak diubah/restart. Fixture/tab/viewport sudah dibersihkan.
+8. Source **`dcffe28`** sudah dipush melalui SSH. **CI Ubuntu sukses**:
+   https://github.com/xibitz/tmux-monitor/actions/runs/42356232678
+   check/test (termasuk liveness/restart/13 Node groups), SSH+PTY/tmux3.8,
+   sizing spike, web/hub build, static Linux/amd64 dan artifact semuanya lulus.
+   Commit dokumen sesudahnya hanya mencatat hasil ini. .env/data/host/key dan
+   proses pengguna tidak diubah/restart. Fixture/tab/viewport sudah dibersihkan.
 
 ## Titik lanjut tepat
 
