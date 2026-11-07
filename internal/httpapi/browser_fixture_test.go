@@ -32,9 +32,18 @@ func (o browserInteractiveOpener) OpenInteractiveTerminal(ctx context.Context, _
 			case <-p.closed:
 				return
 			case data := <-p.input:
-				if string(data) == "\x03" {
+				switch string(data) {
+				case "\x00":
+					data = []byte("[Ctrl+Space]")
+				case "\x01":
+					data = []byte("[Ctrl+A]")
+				case "\x02":
+					data = []byte("[Ctrl+B]")
+				case "\x1bx":
+					data = []byte("[Alt+x]")
+				case "\x03":
 					data = []byte("^C\r\n> ")
-				} else {
+				default:
 					data = bytes.ReplaceAll(data, []byte("\r"), []byte("\r\n"))
 				}
 				if _, err := p.writer.Write(data); err != nil {

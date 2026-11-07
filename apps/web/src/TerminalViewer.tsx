@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { Eye, RefreshCw, ArrowLeft, Keyboard } from "lucide-react";
 import { Terminal } from "@xterm/xterm";
 import { api } from "./api";
+import { TerminalToolbar } from "./TerminalToolbar";
+import { encodeTerminalKey } from "./terminalKeys";
+import type { Modifiers, TerminalKey } from "./terminalKeys";
 import "@xterm/xterm/css/xterm.css";
 
 const reasons: Record<string, string> = {
@@ -87,6 +90,9 @@ type ViewerControl = {
   alive: boolean;
   paused: boolean;
   interactive: boolean;
+  scope: string;
+  cursorMode: () => boolean;
+  focus: () => void;
   send: (data: Uint8Array) => void;
   paste: (text: string) => void;
 };
@@ -115,6 +121,8 @@ export function TerminalViewer({
     scope?: string;
   }>({ attempt: 0 });
   const scope = JSON.stringify([hostId, sessionId, epoch]);
+  const [prefix, setPrefix] = useState("C-b");
+  useEffect(() => setPrefix("C-b"), [scope]);
   const [interactive, setInteractive] = useState(false);
   const [canWrite, setCanWrite] = useState(false);
   const [switching, setSwitching] = useState(false);
@@ -144,7 +152,7 @@ export function TerminalViewer({
         setConnection((current) => ({
           attempt: current.attempt + 1,
           ticket: result.ticket,
-          scope,
+          scope: control.scope,
         }));
     } catch (error) {
       if (controlRef.current === control) {
@@ -244,6 +252,10 @@ export function TerminalViewer({
                   alive: true,
                   paused: false,
                   interactive: writable,
+                  scope,
+                  cursorMode: () =>
+                    terminal?.modes.applicationCursorKeysMode ?? false,
+                  focus: () => terminal?.focus(),
                   send: (bytes) => {
                     if (
                       !active ||
@@ -498,29 +510,30 @@ export function TerminalViewer({
         <div ref={element} />
       </div>
       {interactive && (
-        <div className="terminal-keys" aria-label="Tombol terminal">
-          {[
-            ["Esc", "\x1b"],
-            ["Tab", "\t"],
-            ["Ctrl+C", "\x03"],
-            ["←", "\x1b[D"],
-            ["↑", "\x1b[A"],
-            ["↓", "\x1b[B"],
-            ["→", "\x1b[C"],
-            ["Enter", "\r"],
-          ].map(([label, value]) => (
-            <button
-              className="button secondary"
-              key={label}
-              disabled={!connected || switching}
-              onClick={() =>
-                controlRef.current?.send(new TextEncoder().encode(value))
-              }
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <TerminalToolbar
+          key={scope + ":" + connection.attempt}
+          enabled={connected && !switching}
+          prefix={prefix}
+          onPrefix={setPrefix}
+          onSend={(key: TerminalKey, modifiers: Modifiers) => {
+            const control = controlRef.current;
+            if (
+              !control?.alive ||
+              control.paused ||
+              !control.interactive ||
+              control.scope !== scope
+            )
+              return false;
+            const data = encodeTerminalKey(
+              key,
+              modifiers,
+              control.cursorMode(),
+            );
+            control.send(new TextEncoder().encode(data));
+            control.focus();
+            return true;
+          }}
+        />
       )}
       <p className="panel-description">
         Geser untuk melihat layar remote. Ukuran mengikuti tmux di host. Menutup

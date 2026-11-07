@@ -18,6 +18,7 @@ check:
 
 test:
 	go test -race ./...
+	npm test --prefix apps/web
 
 dev:
 	TMUX_MONITOR_DEV=true TMUX_MONITOR_ORIGIN=http://127.0.0.1:5173 go run ./cmd/hub serve

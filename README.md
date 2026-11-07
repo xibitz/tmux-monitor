@@ -71,8 +71,21 @@ klien milik viewer itu, bukan klien desktop. Jika pergantian gagal, gunakan
 **Buka ulang** yang selalu memulai read-only. Input yang mungkin sudah diproses
 sebelum gangguan tidak pernah dikirim ulang otomatis.
 
-Keyboard mendukung Unicode dan control keys. Tombol sentuh awal menyediakan
-Esc, Tab, Ctrl+C, panah dan Enter. Paste maksimal 16 KiB; teks dengan baris baru
+Keyboard mendukung Unicode dan control keys. Toolbar menyediakan Esc, Tab,
+Ctrl+C, panah, Enter, Backspace, Home, End dan Delete. Untuk kombinasi khusus,
+pilih **Ctrl/Alt/Shift**, isi satu karakter di **Tombol kombinasi**, lalu klik
+**Kirim kombinasi**. Modifier berlaku sekali pada tombol toolbar/kolom tersebut;
+statusnya terlihat dan kembali netral setelah dikirim. Input keyboard fisik dan
+IME tetap ditangani xterm seperti biasa. Shift toolbar memakai pemetaan ASCII.
+
+**Prefix tmux** default Ctrl+B; sesuaikan dengan prefix pada host (misalnya
+Ctrl+A), lalu klik **Kirim prefix** sebelum tombol perintah berikutnya. Pilihan
+ini hanya mengatur byte yang dikirim, tidak mengubah konfigurasi tmux host.
+Pilihan tersimpan dalam memory selama tampilan target terbuka dan kembali ke
+Ctrl+B setelah ditutup/berganti target. Draft/modifier dibuang saat mode atau
+koneksi berubah. Toolbar hanya aktif sesudah aktivasi input.
+
+Paste maksimal 16 KiB; teks dengan baris baru
 selalu meminta tinjauan dan konfirmasi sebelum dikirim. Clipboard OSC52 dan
 tautan dari output terminal tetap tidak otomatis diaktifkan. Navigasi/input tmux
 interaktif dapat memengaruhi session yang sedang dipakai klien desktop juga.
@@ -239,8 +252,9 @@ Host key yang berubah ditolak sampai admin memasang pin baru secara eksplisit.
 Jangan menggunakan data stale untuk menyimpulkan session/proses telah berhenti.
 
 Observasi dibatasi 10 detik, maksimum empat request global dan satu per host,
-stdout 1 MiB serta stderr 16 KiB per command. Tidak ada raw-shell API, command
-input, attach PTY atau pemutaran ulang input pada tahap ini. Jika penghapusan
+stdout 1 MiB serta stderr 16 KiB per command. API observasi tidak menerima raw
+shell atau input terminal. Viewer PTY terpisah memerlukan opt-in dan aktivasi
+seperti panduan di atas; input tidak diputar ulang. Jika penghapusan
 file secret gagal setelah revoke/rotasi, reference tetap nonaktif; periksa dan
 bersihkan file yatim saat maintenance dengan hub berhenti.
 
@@ -265,7 +279,8 @@ Tidak menyambung ke session tmux Anda. Viewer eksperimental mensyaratkan tmux
 3.7+; matriks versi/OS yang lebih luas dan perangkat nyata tetap diperlukan
 untuk dukungan rilis P0.
 
-CI memeriksa format, analisis Go, TypeScript, race tests, build web, dan build
+CI memeriksa format, analisis Go, TypeScript, race tests, matriks byte tombol
+toolbar melalui Node test runner, build web, dan build
 binary Linux tanpa CGO. Kontrak subset API ada di [docs/api-v1.md](docs/api-v1.md).
 
 ## Migrasi dan rollback
@@ -279,6 +294,6 @@ database sementara. Runbook backup/restore produksi lengkap adalah pekerjaan M3.
 
 ## Tahap berikutnya
 
-T12 berikutnya menambahkan viewer PTY read-only setelah kebijakan ukuran tanpa
-desktop dan gate akses dipenuhi. Interactive dan reconnect hanya diaktifkan
-setelah pengujian keselamatan lulus. Lihat MEMORY.md untuk titik lanjut agent.
+Viewer SSH read-only dan aktivasi interactive sudah tersedia secara eksperimental.
+Berikutnya lengkapi gate perangkat/akses/jaringan, aksesibilitas toolbar, lalu
+mutasi tmux dan transport Agent. Lihat MEMORY.md untuk titik lanjut agent.

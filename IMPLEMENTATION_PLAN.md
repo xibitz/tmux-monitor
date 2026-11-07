@@ -27,7 +27,7 @@ pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus
 | T23 | TODO | PTY Agent dan paritas mode terminal. |
 | T24 | TODO | Heartbeat, reconnect/jitter, capability refresh dan rekonsiliasi. |
 | T30 | TODO | Manifest/PWA/service worker asset-only, standalone dan uji perangkat. |
-| T31 | PARTIAL | Tombol sentuh awal Esc/Tab/Ctrl+C/panah/Enter dan konfirmasi paste multiline tersedia. Modifier/prefix, aksesibilitas dan keyboard HP nyata belum tuntas. |
+| T31 | PARTIAL | Tombol sentuh, Ctrl/Alt/Shift sekali pakai, kolom kombinasi, prefix control-key lokal dan konfirmasi paste multiline tersedia. Matriks byte otomatis tersedia; aksesibilitas dan keyboard/IME HP nyata belum tuntas. |
 | T32 | PARTIAL | Audit dasar dan redaction tests tersedia; filter/retensi/security review/fuzz belum. |
 | T33 | TODO | Packaging service, backup/restore, rollback runbook dan rotasi/revoke. |
 | T34 | TODO | Failure matrix dua transport dan kapasitas; gate rilis P0 belum lulus. |
@@ -76,7 +76,8 @@ pengujian lokal dan browser fixture lulus; rincian dan langkah lanjut di MEMORY.
 - [x] Raw PTY dan target client/session terikat; Unicode/Tab/Enter/Ctrl+C diuji dengan SSH/tmux nyata terisolasi.
 - [x] UI aktivasi/downgrade, toolbar awal, konfirmasi paste multiline dan viewport 393px melalui fixture.
 - [ ] HP fisik, Serve/Grants negatif dan gangguan jaringan nyata (gate T01/T03/T12/T13).
-- [ ] Modifier/prefix dan aksesibilitas lengkap T31; mutasi T20 belum dimulai.
+- [x] Modifier/prefix T31 dan matriks byte otomatis; status/draft reset tanpa mengubah keyboard xterm.
+- [ ] Aksesibilitas lengkap dan keyboard/IME perangkat nyata T31; mutasi T20 belum dimulai.
 
 | Tahap | Prioritas | Hasil yang dapat didemokan | Gate keluar |
 |---|---:|---|---|

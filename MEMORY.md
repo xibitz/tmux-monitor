@@ -20,13 +20,15 @@ allowlist SSH, Makefile/CI, **key store + CLI SSH configure/revoke, public host
 key pinning, probe dan inventaris tmux dengan epoch/revision serta cache stale**,
 serta terminal SSH eksperimental (PTY/ticket/WS/xterm), default disabled dan
 read-only saat buka. Interactive tersedia melalui izin + aktivasi per viewer.
+Toolbar interactive kini memiliki modifier sekali pakai, kolom kombinasi dan
+prefix control-key yang dapat dipilih lokal; keyboard fisik tetap melalui xterm.
 
 Baseline sebelum irisan T12: `33466f0` (SSH/inventaris); dokumentasi awal handoff:
 `b7b8c1c`. Sebelumnya `1d8c1cf` (UX allowlist), `5c99762` (fondasi), `a879f8c`
 (rancangan). Commit dokumentasi sesudah kode tidak mengubah implementasinya.
 
 **T00, T10, T11 DONE. T02/T03/T12/T13/T31/T32 PARTIAL. Task lain TODO.
-Berikutnya gate akses/perangkat T03/T12, toolbar T31 dan mutasi T20.**
+Berikutnya gate akses/perangkat T03/T12/T31, gangguan T13 dan mutasi T20.**
 DONE pada T10/T11 berarti acceptance kode/automated tests yang dicatat telah
 lulus, bukan bukti sshd/tailnet/HP pengguna sudah diuji. Agent belum tersedia; M1 dan gate rilis P0 belum selesai. Terminal memerlukan
 opt-in operator, bukan rilis P0 yang telah lulus gate.
@@ -359,6 +361,49 @@ Langkah yang sudah dikerjakan:
    Ini output echo simulasi UI; protokol SSH/PTY nyata diuji
    terpisah pada test socket. Bukan bukti HP fisik atau host nyata.
 
+## Checkpoint T31 toolbar (7 November)
+
+Melanjutkan baseline `b8357a1`. Status **T31 tetap PARTIAL** karena perangkat
+Android/iOS nyata, IME dan screen-reader belum dikualifikasi. Langkah implementasi:
+1. Kontrak perilaku ditulis di docs/api-v1.md sebelum kode; tidak ada endpoint,
+   migrasi atau perubahan izin. Guard gateway interactive tetap otoritatif.
+2. `apps/web/src/terminalKeys.ts` mengodekan Ctrl/Alt/Shift untuk karakter tunggal
+   dan tombol khusus. Unicode tanpa modifier tetap UTF-8; Ctrl/Shift toolbar
+   dibatasi ASCII yang didukung. Input tidak valid ditolak tanpa byte. Panah,
+   Home/End mengikuti DECCKM xterm; modifier cursor mengikuti CSI bitset legacy.
+   Ctrl+C tetap ETX; prefix mengirim persis satu control byte dan tidak menyertakan
+   perintah berikutnya. Tidak mengklaim dukungan Kitty/CSI-u.
+3. `TerminalToolbar.tsx` menyediakan status/aria-pressed, reset modifier, kolom
+   kombinasi (Enter setelah IME composition selesai), tombol khusus dan selector
+   prefix. Modifier hanya berlaku pada aksi toolbar/kolom kombinasi dan reset
+   setelah kirim berhasil. onData/onBinary/IME/paste xterm tidak ditransformasi.
+   Tidak menyimpan input/output/clipboard di log atau browser persistence.
+4. `TerminalViewer.tsx` memeriksa control alive/paused/interactive dan target scope
+   sebelum aksi toolbar; cursor mode dibaca saat kirim. Reconnect/mode/target
+   replacement membuang draft/modifier. Prefix default Ctrl+B, pilihan lokal
+   di memory tampilan target, bertahan saat mode berganti, reset saat tampilan
+   ditutup/host/session/epoch berubah. Tidak mengubah opsi tmux host. Binding
+   hasil mode-ticket memakai scope control asal, bukan props yang mungkin berubah.
+5. `apps/web/tests/terminalKeys.test.mjs` memakai Node test runner/strip-types,
+   tanpa dependency tambahan. Lima kelompok uji mencakup C0/NUL/DEL, Alt/Unicode,
+   Shift ASCII, invalid/surrogate/multi-character, DECCKM + semua bit modifier,
+   tombol tetap dan prefix satu byte. `make test` kini menjalankan matriks ini
+   setelah Go -race; CI otomatis ikut menjalankan. README berisi cara pakai.
+6. `make check test build` lokal lulus (tmp GOPATH/GOCACHE seperti lingkungan di
+   atas): format/vet/TypeScript, Go -race termasuk SSH+PTY/tmux nyata terisolasi,
+   lima kelompok Node tests, Vite dan hub build. Browser fixture production-CSP
+   pada 393x852 lulus: readonly tanpa toolbar; aktivasi; Ctrl+c menghasilkan ^C,
+   Alt+x/Shift+a/prefix Ctrl+A sesuai output echo fixture; ketikan biasa tetap
+   utuh walau modifier toolbar aktif. Multi-character ditolak, reset mode/draft
+   dan prefix setelah close/reopen benar. Lebar halaman393, semua kontrol44px,
+   tiga style memiliki atribut nonce, console tanpa warning/error. Fixture
+   memiliki penanda control byte khusus test; bukan rekaman input produksi.
+   Screenshot:
+   `/Users/yasho/.codex/visualizations/2026/11/06/01a1afc8-c2a7-70c3-9eba-3da9aa5e9063/terminal-toolbar-mobile.jpg`.
+   Tab/viewport dan fixture sudah dibersihkan. Runtime/.env/data/key/host pengguna
+   tidak diubah. Bukti HP fisik/IME/tailnet nyata tetap belum ada.
+7. Commit/push SSH dan hasil CI source dicatat setelah checkpoint ini.
+
 ## Titik lanjut tepat
 
 1. Baca hasil CI/commit checkpoint interactive terbaru. Cek git status dan
@@ -366,9 +411,9 @@ Langkah yang sudah dikerjakan:
 2. Lengkapi negative access Serve/Grants dan device matrix T01/T03. Minimum
    tmux3.7 tetap wajib; default manual pada tmux3.6a bisa crash. Jangan merendahkan
    gate minimum untuk membuat terminal bekerja di host lama; lihat ADR0001.
-3. T31: modifier Ctrl/Alt/Shift, prefix tmux, keyboard fisik/IME Android+iOS,
-   clipboard sensitif dan aksesibilitas perangkat nyata. Toolbar saat ini baru
-   subset awal, bukan klaim T31 DONE. Input membagi session dengan desktop.
+3. T31: uji keyboard fisik/IME Android+iOS, clipboard sensitif dan aksesibilitas
+   screen-reader/fokus pada perangkat nyata. Modifier/prefix dan matriks byte
+   sudah tersedia; bukan klaim T31 DONE. Input membagi session dengan desktop.
 4. T13: uji real network switch/sleep/hub restart dan error taxonomy final;
    mode activation/reopen harus tetap readonly dan tanpa replay. Input yang
    sudah in-flight pada waktu revoke/disconnect mungkin sudah diproses remote;

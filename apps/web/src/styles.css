@@ -1631,6 +1631,48 @@ p {
   min-height: 44px;
   padding: 6px 10px;
 }
+.modifier-key[aria-pressed="true"] {
+  background: var(--accent);
+  color: #172111;
+  border-color: var(--accent);
+}
+.toolbar-status {
+  font-size: 12px;
+  color: var(--accent);
+  margin: 6px 0 12px;
+}
+.key-composer label,
+.prefix-setting label {
+  display: block;
+  margin: 8px 0;
+  font-size: 12px;
+}
+.key-composer-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.key-composer-row input {
+  flex: 1 1 90px;
+  width: 90px;
+  min-width: 0;
+}
+.prefix-setting select {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  background: #101813;
+  color: inherit;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  margin-bottom: 8px;
+  font: inherit;
+}
+.terminal-toolbar button,
+.terminal-toolbar input {
+  min-height: 44px;
+}
 .terminal-scroll {
   max-width: 100%;
   max-height: 60vh;

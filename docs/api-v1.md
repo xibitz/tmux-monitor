@@ -171,6 +171,25 @@ interactive mode. Paste is capped at 16 KiB and multiline paste requires a revie
 and explicit confirmation on every host. Pending paste/input is dropped when the
 connection/mode changes. OSC52, automatic links and window operations stay disabled.
 
+### Touch keyboard controls (T31, partial)
+
+The toolbar is active only in a confirmed interactive viewer. Ctrl/Alt/Shift are
+one-shot modifiers for toolbar keys and its single-character combination field;
+they do not rewrite xterm keyboard, IME, paste or terminal-response events.
+Successful sends clear the modifiers and draft. Close, mode transition, reconnect
+and target changes reset toolbar drafts/modifiers; no input is persisted/replayed.
+Read-only never offers a usable toolbar, and the gateway checks remain authoritative.
+Unsupported character combinations show an error without sending bytes. Cursor
+keys respect xterm's application cursor mode and legacy xterm modifier encoding.
+
+The prefix selector defaults to Ctrl+B and supports single control-key prefixes.
+It sends only the chosen prefix byte, with no following tmux command. Selection
+is kept in memory for the current target view, including mode replacement, and
+resets when that view closes or host/session/epoch changes. It never changes the
+remote tmux configuration. No localStorage or API endpoint is added. Touch
+controls retain 44px targets and explicit labels/pressed states. Physical device
+keyboard/IME qualification remains a release gate.
+
 New reasons include `credentials_required`, `credentials_invalid`,
 `address_not_allowed`, `address_not_tailnet`, `host_key_mismatch`,
 `authentication_failed`, `timeout`, `connection_failed`, `os_user_mismatch`,
