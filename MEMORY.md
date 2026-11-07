@@ -588,7 +588,10 @@ Langkah implementasi:
 8. README, kontrak API, ADR0004 dan plan menjelaskan bahwa source create/kill dan
    migrasi005 belum diuji. CI sukses99c0791 hanya bukti baseline rename sebelumnya.
    Tidak ada operasi ke host/tmux/SSH pengguna, test fixture, perubahan .data,
-   keys, Tailscale atau runtime. Commit/push SSH dengan [skip ci] dicatat berikutnya.
+   keys, Tailscale atau runtime. Source **`b9c8277`** sudah dipush melalui SSH,
+   commit `feat: add gated session create and kill [skip ci]`. CI sengaja dilewati
+   lewat marker tersebut; tidak ada hasil test/build/CI baru yang diklaim.
+   Commit dokumen sesudahnya hanya mencatat checkpoint tanpa menjalankan testing.
 
 Pekerjaan yang belum diverifikasi (jangan jalankan selama instruksi no-testing
 masih berlaku): compile/TypeScript; regression rename/terminal; migrasi4/5 dan

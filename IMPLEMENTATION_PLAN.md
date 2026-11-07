@@ -110,6 +110,7 @@ defaultfalse, katalog tmux -N, existing-server create, full-tree kill, result_ta
 migrasi005, endpoint dan UI sudah ditulis. Yang dilakukan hanya pembacaan source,
 peninjauan diff dan formatting; tidak ada test/build/compile/browser/CI. Push
 memakai `[skip ci]`. CI sukses99c0791 di atas hanya berlaku pada baseline rename.
+Source create/kill `b9c8277` sudah dipush melalui SSH, tetap **BELUM DIUJI**.
 
 Kualifikasi yang masih pending bila testing kembali diminta:
 
