@@ -130,15 +130,20 @@ func (m *Manager) openTerminal(ctx context.Context, h Host, record Record, targe
 		return nil, fail("terminal_attach_failed")
 	}
 	reader := bufio.NewReaderSize(t.reader, 256)
-	line, err := reader.ReadSlice('\n')
+	line, err := reader.ReadSlice(0)
 	if err != nil || len(line) > 128 {
 		return nil, fail("terminal_tty_unavailable")
 	}
-	t.tty = strings.TrimSuffix(strings.TrimSuffix(string(line), "\n"), "\r")
+	t.tty = strings.TrimSuffix(string(line), "\x00")
 	if !tmux.ValidTTY(t.tty) {
 		return nil, fail("terminal_tty_invalid")
 	}
 	t.reader = reader
+	// This fixed initialization ack is consumed by the catalog's shell read,
+	// before tmux exists. It never carries browser input, including in readonly.
+	if n, err := io.WriteString(t.stdin, "ready\n"); err != nil || n != len("ready\n") {
+		return nil, fail("terminal_attach_failed")
+	}
 	t.clientCommand, _ = tmux.ClientTargetsCommand(h.Socket)
 	for {
 		if err = t.checkClient(setup); err == nil {

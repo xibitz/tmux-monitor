@@ -101,8 +101,9 @@ needed on upgrade: the one-use ticket was issued by a CSRF-protected POST.
 The connector freshly verifies the pinned SSH host, OS user, tmux server epoch
 and session. Requires tmux >=3.7, global default `window-size manual` and every
 window in the selected session effectively `manual`. The application never
-changes remote options. The fixed attach catalog prints its SSH PTY identity
-first; the connector consumes that line and verifies that exact tmux client
+changes remote options. The fixed attach catalog captures its SSH PTY identity
+in a NUL-terminated metadata frame, then waits for the connector's fixed initialization
+ack before starting tmux (avoiding startup output flushes). The connector consumes that frame and verifies that exact tmux client
 remains on the selected native session. Client switch or loss closes the viewer
 on its next policy check. This metadata is not forwarded as terminal output. Otherwise it reports `terminal_size_policy` and does not
 attach. The PTY uses the active remote window size plus its status rows (maximum
@@ -117,7 +118,7 @@ there is no second `terminal.open` message. Each binary output frame has a
 30-byte header: version uint8=1, direction uint8=0 (server output), generation
 uint32BE=1, sequence uint64BE starting at 1, viewer ID raw 16 bytes; then PTY bytes.
 Chunks <=32 KiB; incoming message limit 64 KiB. Read-only binary input, in-band mode changes and
-resize requests close with `input_forbidden` (no bytes sent to SSH stdin).
+resize requests close with `input_forbidden` (no browser input sent to SSH stdin).
 Read-only accepts only `{"type":"terminal.detach"}` from the client;
 interactive binary frames follow the activation contract below.
 
@@ -175,6 +176,9 @@ New reasons include `credentials_required`, `credentials_invalid`,
 `authentication_failed`, `timeout`, `connection_failed`, `os_user_mismatch`,
 `tmux_missing`, `inventory_invalid`, `inventory_changed`, `output_limit`,
 `agent_unavailable`. An SSH connection failure never means a tmux process died.
+Terminal startup can also report `terminal_tty_unavailable` (missing/incomplete
+metadata frame) or `terminal_tty_invalid` (unrecognized PTY identity); neither
+includes remote output or paths in the error response.
 
 `AuditEvent` contains `id`, `actor`, `action`, optional `hostId` and `target`, `result`,
 `requestId`, and `at`. Audit metadata never includes passwords, session tokens,

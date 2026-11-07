@@ -190,7 +190,10 @@ menormalisasi tab dan list target gagal (fingerprint printable + recheck kosong)
 negosiasi multi-key harus dipersempit ke public pin; cache salah-host/korup dan
 hasil in-flight dari credential lama tidak boleh ditampilkan sebagai fresh.
 
-## Checkpoint T12 read-only (7 November)
+## Checkpoint sebelumnya: T12 read-only (7 November)
+
+Bagian ini adalah baseline sebelum interactive. Keadaan terbaru dan langkah
+lanjut berada pada checkpoint interactive di bawah.
 
 Kode: `32af116` sudah dipush ke origin/main melalui SSH. CI Linux:
 https://github.com/xibitz/tmux-monitor/actions/runs/42305690493
@@ -271,6 +274,18 @@ Bukti checkpoint lokal:
 
 ## Checkpoint T12 interactive (7 November)
 
+Kode `7379720` sudah dipush melalui SSH. CI: https://github.com/xibitz/tmux-monitor/actions/runs/42315991987
+Run7379720 gagal pada startup PTY runner Ubuntu; diagnosis113610a menunjukkan
+metadata path TTY tanpa pemisah LF sebelum escape tmux. Koreksi berikutnya
+menggunakan frame NUL + fixed ready ack sebelum tmux dijalankan. Frame ini
+dikonsumsi connector; bukan input browser dan bukan output renderer. Tidak
+mengandalkan newline/flush terminal. Hasil CI koreksi akan dicatat di bawah.
+Uji tambahan Linux lokal: container baru dari image resmi yang sudah tersedia,
+tmux 3.8 dibangun dari tarball resmi/checksum yang sama; fixture SSH/PTY lulus
+(CGO=0 tanpa race). Tidak ada data/service/container pengguna yang dipakai.
+Fixture browser sudah dihentikan dan tab/viewport pengujian dibersihkan.
+Runtime dan data pengguna tidak direstart/diubah.
+
 Implementasi melanjutkan baseline `fb4d840`. Status tetap **T12/T13/T31 PARTIAL**:
 fungsi kode dan fixture telah tersedia, sedangkan gate perangkat/Serve-Grants
 nyata, keyboard/modifier lengkap dan network switching belum selesai.
@@ -290,8 +305,12 @@ Langkah yang sudah dikerjakan:
 3. `internal/connector/ssh/terminal.go`: `OpenInteractiveTerminal` mengembalikan
    `InputTerminal.WriteInput(ctx,bytes)`, sedangkan `OpenTerminal` tidak punya
    writer. Katalog interactive attach hanya `ignore-size`; sizing/version/pin
-   dan setup policy sama. Prefix katalog `tty` memberi identitas PTY yang
-   dikonsumsi connector (maksimal128byte), bukan dikirim ke renderer. Klien pada
+   dan setup policy sama. Prefix katalog menangkap `tty` melalui command substitution (bukan output
+   tty langsung), mencetak metadata berakhir NUL dan menunggu fixed `ready` ack
+   sebelum exec tmux. Connector mengonsumsi frame (maksimal128byte); metadata
+   tidak dikirim ke renderer. Hal ini menghindari output yang di-flush saat
+   startup tmux; readonly tidak pernah meneruskan input browser, hanya ack
+   inisialisasi yang dikonsumsi shell read sebelum tmux berjalan. Klien pada
    tty itu harus tetap berada di native session terpilih; fresh list-clients
    dicek saat attach dan periodic Check. Explicit switch-client ke session lain
    terdeteksi walaupun session asal masih hidup. Write maksimal16KiB, deadline2detik, short/error write

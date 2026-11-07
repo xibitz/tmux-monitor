@@ -102,9 +102,10 @@ func attachCommand(socket, session string, interactive bool) (string, error) {
 	for i := range args {
 		args[i] = ShellQuote(args[i])
 	}
-	// First line identifies only this SSH PTY; the connector consumes it before
-	// forwarding any terminal bytes. Never select/toggle an unrelated client.
-	return "tty && exec env LC_ALL=C " + strings.Join(args, " "), nil
+	// Capture tty off the PTY, frame it with NUL and wait for a fixed ack. tmux
+	// may flush terminal output on startup, so it must not start before the
+	// connector has consumed the complete metadata frame. No user input is used.
+	return `_tmux_monitor_tty=$(tty) && printf '%s\000' "$_tmux_monitor_tty" && IFS= read -r _tmux_monitor_ready && [ "$_tmux_monitor_ready" = 'ready' ] && exec env LC_ALL=C ` + strings.Join(args, " "), nil
 }
 
 func ParseTerminalPolicy(host, socket, session, epoch string, output []byte) (TerminalPolicy, error) {

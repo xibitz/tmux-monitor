@@ -168,9 +168,9 @@ func terminalServer(t *testing.T, f *fixture, env []string) string {
 								done := make(chan struct{})
 								go func() { _, _ = io.Copy(master, channel); _ = cmd.Process.Kill(); close(done) }()
 								reader := bufio.NewReaderSize(master, 256)
-								identity, readErr := reader.ReadSlice('\n')
+								identity, readErr := reader.ReadSlice(0)
 								// Synthetic fixture metadata only; never terminal input/output.
-								t.Logf("fixture PTY identity %q, read error %v", identity, readErr)
+								t.Logf("fixture PTY identity valid=%t length=%d error=%v", tmux.ValidTTY(strings.TrimSuffix(string(identity), "\x00")), len(identity), readErr)
 								_, _ = channel.Write(identity)
 								_, _ = io.Copy(channel, reader)
 								_ = cmd.Wait()
