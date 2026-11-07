@@ -3,18 +3,21 @@ package sshconnector
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"io"
 	"net"
 	"os"
 	"os/exec"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/creack/pty"
 	"github.com/xibitz/tmux-monitor/internal/tmux"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/term"
 )
 
 // PTY-aware SSH peer, executing only this test's fixed catalog on its own socket.
@@ -33,6 +36,8 @@ func terminalServer(t *testing.T, f *fixture, env []string) string {
 	cfg.AddHostKey(f.hostSigner)
 	policy, _ := tmux.TerminalPolicyCommand(f.host.Socket, "$0")
 	attach, _ := tmux.AttachCommand(f.host.Socket, "$0")
+	interactiveAttach, _ := tmux.InteractiveAttachCommand(f.host.Socket, "$0")
+	clients, _ := tmux.ClientTargetsCommand(f.host.Socket)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	connections := map[net.Conn]bool{}
@@ -85,6 +90,21 @@ func terminalServer(t *testing.T, f *fixture, env []string) string {
 									continue
 								}
 								size = pty.Winsize{Cols: uint16(p.Cols), Rows: uint16(p.Rows)}
+								modes := map[byte]uint32{}
+								for i := 0; i+4 < len(p.Modes) && p.Modes[i] != 0; i += 5 {
+									modes[p.Modes[i]] = binary.BigEndian.Uint32([]byte(p.Modes[i+1 : i+5]))
+								}
+								valid := true
+								for _, mode := range []byte{ssh.ECHO, ssh.ICANON, ssh.ISIG} {
+									v, exists := modes[mode]
+									if !exists || v != 0 {
+										valid = false
+									}
+								}
+								if !valid {
+									_ = request.Reply(false, nil)
+									continue
+								}
 								hasPTY = true
 								_ = request.Reply(true, nil)
 							case "exec":
@@ -98,18 +118,18 @@ func terminalServer(t *testing.T, f *fixture, env []string) string {
 									_, _ = channel.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{0}))
 									return
 								}
-								if x.Command != policy && x.Command != attach {
+								if x.Command != policy && x.Command != attach && x.Command != interactiveAttach && x.Command != clients {
 									_ = request.Reply(false, nil)
 									return
 								}
-								if x.Command == attach && !hasPTY {
+								if (x.Command == attach || x.Command == interactiveAttach) && !hasPTY {
 									_ = request.Reply(false, nil)
 									return
 								}
 								_ = request.Reply(true, nil)
 								cmd := exec.Command("/bin/sh", "-c", x.Command)
 								cmd.Env = env
-								if x.Command == policy {
+								if x.Command == policy || x.Command == clients {
 									var stderr bytes.Buffer
 									cmd.Stderr = &stderr
 									out, e := cmd.Output()
@@ -122,8 +142,26 @@ func terminalServer(t *testing.T, f *fixture, env []string) string {
 									_, _ = channel.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{status}))
 									return
 								}
-								master, e := pty.StartWithSize(cmd, &size)
+								master, slave, e := pty.Open()
 								if e != nil {
+									return
+								}
+								if _, e = term.MakeRaw(int(slave.Fd())); e != nil {
+									_ = master.Close()
+									_ = slave.Close()
+									return
+								}
+								if e = pty.Setsize(master, &size); e != nil {
+									_ = master.Close()
+									_ = slave.Close()
+									return
+								}
+								cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
+								cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true}
+								e = cmd.Start()
+								_ = slave.Close()
+								if e != nil {
+									_ = master.Close()
 									return
 								}
 								done := make(chan struct{})
@@ -264,4 +302,68 @@ func TestReadOnlyTerminalUsesRealSSHPTYAndPreservesSession(t *testing.T) {
 		}
 		t.Fatal("stale epoch accepted")
 	}
+	run("set-option", "-w", "-t", "@1", "window-size", "manual")
+	inputPath := dir + "/input.txt"
+	run("respawn-pane", "-k", "-t", "%0", "stty -echo; cat >"+tmux.ShellQuote(inputPath))
+	interactive, e := m.OpenInteractiveTerminal(ctx, f.host, f.record, "$0", inv.Epoch)
+	if e != nil {
+		t.Fatal(e)
+	}
+	writer, ok := interactive.(InputTerminal)
+	if !ok {
+		t.Fatal("interactive writer absent")
+	}
+	if _, ok := stream.(InputTerminal); ok {
+		t.Fatal("readonly exposes input writer")
+	}
+	flags = string(run("list-clients", "-F", "#{client_flags}"))
+	if strings.Contains(flags, "read-only") || !strings.Contains(flags, "ignore-size") {
+		t.Fatal("interactive flags incorrect")
+	}
+	text := "unicode-é-秘密\tend"
+	if e = writer.WriteInput(ctx, []byte(text+"\r")); e != nil {
+		t.Fatal(e)
+	}
+	deadline = time.Now().Add(2 * time.Second)
+	for {
+		data, _ := os.ReadFile(inputPath)
+		if string(data) == text+"\n" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("PTY input not delivered: %q", data)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	_ = interactive.Close()
+	run("has-session", "-t", "$0")
+	if after := string(run("list-windows", "-t", "$0", "-F", "#{window_id}|#{window_width}|#{window_height}")); after != before {
+		t.Fatal("interactive attach/detach resized windows")
+	}
+	probe, e := m.OpenInteractiveTerminal(ctx, f.host, f.record, "$0", inv.Epoch)
+	if e != nil {
+		t.Fatal(e)
+	}
+	run("new-session", "-d", "-s", "other-session", "sleep 120")
+	run("switch-client", "-c", probe.(*inputTerminal).tty, "-t", "$1")
+	if e := probe.Check(ctx); Code(e) != "terminal_target_changed" {
+		t.Fatalf("client switch escaped target binding: %v", e)
+	}
+	_ = probe.Close()
+	interactive, e = m.OpenInteractiveTerminal(ctx, f.host, f.record, "$0", inv.Epoch)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer interactive.Close()
+	if e = interactive.(InputTerminal).WriteInput(ctx, []byte{3}); e != nil {
+		t.Fatal(e)
+	}
+	deadline = time.Now().Add(2 * time.Second)
+	for strings.Contains(string(run("list-panes", "-a", "-F", "#{pane_id}")), "%0") {
+		if time.Now().After(deadline) {
+			t.Fatal("Ctrl+C did not reach the disposable cat process")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	run("has-session", "-t", "$0") // other window remains; close is still detach
 }

@@ -10,14 +10,15 @@ Konektor SSH sekarang mendukung key khusus hub, pin host key, probe serta invent
 session/window/pane tmux dengan epoch dan cache stale. Asset web disertakan dalam
 binary hub setelah build. Kredensial dipasang melalui CLI lokal, bukan formulir.
 
-**Viewer terminal SSH read-only tersedia secara eksperimental dan nonaktif secara
-default.** Input interaktif dan konektor Agent belum tersedia. Belum ada service
+**Terminal SSH tersedia secara eksperimental dan nonaktif secara default.**
+Viewer selalu dimulai read-only; input interaktif memerlukan izin dan aktivasi
+per viewer. Konektor Agent belum tersedia. Belum ada service
 worker, control mode, pairing agent, atau notifikasi. Gate rilis P0 belum lulus.
 
 Agent berikutnya mulai dari [MEMORY.md](MEMORY.md). Status setiap task dan gate
 berada di [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
-## Terminal read-only eksperimental
+## Terminal SSH eksperimental
 
 Setelah SSH/inventaris berfungsi, operator dapat mencoba viewer dengan
 `TMUX_MONITOR_TERMINAL_ENABLED=true` pada environment hub, lalu restart backend.
@@ -28,7 +29,7 @@ upgrade. CLI dan server harus tetap memakai direktori data yang sama.
 
 Di detail host, klik **Periksa koneksi** untuk inventaris baru, lalu **Buka
 terminal read-only** di session. Viewer hanya menampilkan session aktif bersama
-klien tmux lain. Ia tidak menyediakan pane independen atau input keyboard.
+klien tmux lain. Ia tidak menyediakan pane independen. Input keyboard memerlukan aktivasi terpisah.
 Ukuran mengikuti window remote; layar ponsel dapat digeser. Tutup/Kembali hanya
 detach. Bila putus, **Buka ulang** membuat viewer baru tanpa replay input.
 
@@ -62,9 +63,26 @@ pemeriksaan izin dan SSH. Perubahan eksternal dapat
 memengaruhi tmux sebelum pemeriksaan berikutnya. Grid dibatasi 500 kolom dan
 200 baris window ditambah maksimum 5 baris status.
 
+Untuk mengetik, klik **Aktifkan input**, baca dampak terhadap session bersama,
+lalu **Aktifkan untuk viewer ini**. Admin memiliki izin ini; akun lain memerlukan
+`tmux:read` dan `terminal:write` pada host tersebut. **Kembali read-only** melepas
+koneksi interaktif dan membuka viewer baru. Pergantian mode hanya menyentuh
+klien milik viewer itu, bukan klien desktop. Jika pergantian gagal, gunakan
+**Buka ulang** yang selalu memulai read-only. Input yang mungkin sudah diproses
+sebelum gangguan tidak pernah dikirim ulang otomatis.
+
+Keyboard mendukung Unicode dan control keys. Tombol sentuh awal menyediakan
+Esc, Tab, Ctrl+C, panah dan Enter. Paste maksimal 16 KiB; teks dengan baris baru
+selalu meminta tinjauan dan konfirmasi sebelum dikirim. Clipboard OSC52 dan
+tautan dari output terminal tetap tidak otomatis diaktifkan. Navigasi/input tmux
+interaktif dapat memengaruhi session yang sedang dipakai klien desktop juga.
+
 Tiket browser sekali pakai berlaku 30 detik; viewer maksimal 30 menit. Batas
-aktif: 8 global, 4 per pengguna, 4 per host. Input dan permintaan resize ditolak
-server; tmux juga di-attach dengan `read-only,ignore-size`. Output hanya transit,
+aktif: 8 global, 4 per pengguna, 4 per host. Input ditolak saat read-only; permintaan resize viewport tetap ditolak.
+Read-only memakai `read-only,ignore-size`; interactive memakai klien baru dengan
+`ignore-size`. Tiket pergantian mode hanya berlaku 15 detik dan sekali pakai.
+Input interaktif dibatasi 16 KiB per frame, 64 KiB/detik dengan burst 32 KiB,
+serta pemeriksaan izin/kredensial pada setiap frame sebelum menulis ke SSH. Output hanya transit,
 buffer terbatas, tanpa rekaman di database atau browser persistence.
 
 ## Menjalankan secara lokal

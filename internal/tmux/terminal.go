@@ -2,9 +2,51 @@ package tmux
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 )
+
+var ttyPath = regexp.MustCompile(`^/dev/(pts/[0-9]{1,10}|tty[a-zA-Z0-9]{1,32})$`)
+
+func ClientTargetsCommand(socket string) (string, error) {
+	if !socketName.MatchString(socket) {
+		return "", ErrInvalid
+	}
+	args := []string{"tmux", "-L", socket, "list-clients", "-F", "C|#{client_tty}|#{session_id}"}
+	for i := range args {
+		args[i] = ShellQuote(args[i])
+	}
+	return "LC_ALL=C " + strings.Join(args, " "), nil
+}
+
+func ValidTTY(value string) bool { return ttyPath.MatchString(value) }
+
+func CheckClientTarget(output []byte, tty, session string) error {
+	if !ValidTTY(tty) || !validID(session, '$') || len(output) > MaxOutput {
+		return ErrInvalid
+	}
+	found := false
+	for _, line := range strings.Split(strings.TrimSuffix(string(output), "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		fields := strings.Split(line, "|")
+		if len(fields) != 3 || fields[0] != "C" || !validID(fields[2], '$') {
+			return ErrInvalid
+		}
+		if fields[1] == tty {
+			if found || fields[2] != session {
+				return ErrChanged
+			}
+			found = true
+		}
+	}
+	if !found {
+		return ErrChanged
+	}
+	return nil
+}
 
 // TerminalPolicy is freshly read from tmux, never from the inventory cache.
 type TerminalPolicy struct {
@@ -41,14 +83,28 @@ func TerminalPolicyCommand(socket, session string) (string, error) {
 }
 
 func AttachCommand(socket, session string) (string, error) {
+	return attachCommand(socket, session, false)
+}
+
+func InteractiveAttachCommand(socket, session string) (string, error) {
+	return attachCommand(socket, session, true)
+}
+
+func attachCommand(socket, session string, interactive bool) (string, error) {
 	if !socketName.MatchString(socket) || !validID(session, '$') {
 		return "", ErrInvalid
 	}
-	args := []string{"tmux", "-L", socket, "attach-session", "-f", "read-only,ignore-size", "-t", session}
+	flags := "read-only,ignore-size"
+	if interactive {
+		flags = "ignore-size"
+	}
+	args := []string{"tmux", "-L", socket, "attach-session", "-f", flags, "-t", session}
 	for i := range args {
 		args[i] = ShellQuote(args[i])
 	}
-	return "exec env LC_ALL=C " + strings.Join(args, " "), nil
+	// First line identifies only this SSH PTY; the connector consumes it before
+	// forwarding any terminal bytes. Never select/toggle an unrelated client.
+	return "tty && exec env LC_ALL=C " + strings.Join(args, " "), nil
 }
 
 func ParseTerminalPolicy(host, socket, session, epoch string, output []byte) (TerminalPolicy, error) {

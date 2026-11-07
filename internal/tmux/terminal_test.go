@@ -50,4 +50,15 @@ func TestTerminalPolicyRequiresStableManualWindows(t *testing.T) {
 	if _, err := TerminalPolicyCommand("bad socket", "$0"); err == nil {
 		t.Fatal("unsafe socket")
 	}
+	if err := CheckClientTarget([]byte("C|/dev/pts/4|$0\nC|/dev/pts/5|$1\n"), "/dev/pts/4", "$0"); err != nil {
+		t.Fatal(err)
+	}
+	for _, out := range []string{"C|/dev/pts/4|$1\n", "C|/dev/pts/5|$0\n", "C|/dev/pts/4|$0\nC|/dev/pts/4|$0\n", "bad"} {
+		if CheckClientTarget([]byte(out), "/dev/pts/4", "$0") == nil {
+			t.Fatal("bad client target accepted")
+		}
+	}
+	if ValidTTY("/dev/pts/4; rm -rf /") {
+		t.Fatal("unsafe tty")
+	}
 }

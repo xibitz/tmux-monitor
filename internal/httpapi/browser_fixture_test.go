@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -17,6 +18,33 @@ import (
 	"github.com/xibitz/tmux-monitor/internal/tmux"
 	"github.com/xibitz/tmux-monitor/internal/webassets"
 )
+
+type browserInteractiveOpener struct{ openerFunc }
+
+func (o browserInteractiveOpener) OpenInteractiveTerminal(ctx context.Context, _ sshconnector.Host, _ sshconnector.Record, _, _ string) (sshconnector.Terminal, error) {
+	p := &writablePipe{pipeTerminal: newPipeTerminal(), input: make(chan []byte, 16)}
+	go func() {
+		_, _ = io.WriteString(p.writer, "\x1b[2J\x1b[H\x1b[32mFixture terminal interaktif\x1b[0m\r\nInput di bawah hanya echo fixture UI.\r\nSSH/PTY nyata diuji pada socket test terpisah.\r\n\r\n> ")
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-p.closed:
+				return
+			case data := <-p.input:
+				if string(data) == "\x03" {
+					data = []byte("^C\r\n> ")
+				} else {
+					data = bytes.ReplaceAll(data, []byte("\r"), []byte("\r\n"))
+				}
+				if _, err := p.writer.Write(data); err != nil {
+					return
+				}
+			}
+		}
+	}()
+	return p, nil
+}
 
 // Explicit manual browser fixture, excluded from shipped binaries. All HTTP,
 // login/CSRF and persistence are real; only SSH observation data is simulated.
@@ -37,7 +65,7 @@ func TestBrowserFixture(t *testing.T) {
 		h.server.cfg.TerminalEnabled = true
 		h.server.cfg.Development = false // production CSP, Secure cookie on localhost
 		h.server.cfg.AllowedSSHHosts["test.example.ts.net"] = true
-		h.server.terminal = openerFunc(func(ctx context.Context, _ sshconnector.Host, _ sshconnector.Record, _, _ string) (sshconnector.Terminal, error) {
+		h.server.terminal = browserInteractiveOpener{openerFunc(func(ctx context.Context, _ sshconnector.Host, _ sshconnector.Record, _, _ string) (sshconnector.Terminal, error) {
 			p := newPipeTerminal()
 			go func() {
 				_, _ = io.WriteString(p.writer, "\x1b[2J\x1b[H\x1b[32mtmux monitor · fixture read-only\x1b[0m\r\n\r\nHost uji / session-untuk-uji\r\nPTY 120 x 40 · ukuran remote dipertahankan\r\n\r\nOutput ini disimulasikan untuk pengujian UI.\r\nSSH dengan PTY dan tmux nyata diuji terpisah.\r\n\r\n\x1b]52;c;dGVzdA==\x07\x1b]8;;https://example.invalid\x07Tautan terminal tidak diaktifkan\x1b]8;;\x07\r\n")
@@ -50,7 +78,7 @@ func TestBrowserFixture(t *testing.T) {
 					case <-p.closed:
 						return
 					case <-tick.C:
-						if n > 10 {
+						if n > 60 {
 							_ = p.Close()
 							return
 						}
@@ -61,7 +89,7 @@ func TestBrowserFixture(t *testing.T) {
 				}
 			}()
 			return p, nil
-		})
+		})}
 	}
 	h.server.assets = webassets.Files()
 	var probes atomic.Int32

@@ -53,9 +53,15 @@ before periodic detection; this is not an atomic lock on operator actions.
 This conservative policy trades automatic desktop resizing for an explicit,
 testable no-resize policy in the experimental viewer. See the operator README.
 
-The read-only connector exposes Reader/Close/Size/Check only. It holds SSH stdin
-open without writes. Interactive activation, window navigation and viewport
-resizing are not implemented; do not infer their safety from read-only tests.
+The read-only connector exposes Reader/Close/Size/Check only. Interactive uses
+a separate InputTerminal capability after explicit permission and activation.
+Mode changes close/wait for the old viewer before issuing a one-use replacement
+ticket; a new SSH client is attached with ignore-size. No desktop client flags
+are toggled. Generic reopen always gets a read-only client and a new viewer ID.
+Raw SSH PTY modes are required so initial Ctrl+C is delivered to tmux rather
+than interpreted as a signal by the outer SSH tty. Unicode/Tab/Enter/control-byte
+tests exercise a real SSH PTY on a disposable tmux socket. Viewport resizing and
+independent per-pane navigation remain unsupported.
 
 This evidence supports the planned PTY session view. It does not establish a
 minimum supported tmux version, independent per-pane navigation, epoch collision

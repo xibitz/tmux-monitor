@@ -1582,6 +1582,13 @@ p {
   align-items: center;
   gap: 8px;
 }
+.viewer-header {
+  position: sticky;
+  top: -1px;
+  background: #1a211b;
+  padding: 8px 0 12px;
+  z-index: 3;
+}
 .modal.terminal-modal {
   width: min(1080px, calc(100vw - 24px));
 }
@@ -1600,6 +1607,29 @@ p {
 .viewer-status {
   font-size: 13px;
   line-height: 1.6;
+}
+.input-confirmation {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 12px 0;
+}
+.input-confirmation pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 160px;
+  overflow: auto;
+}
+.terminal-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0;
+}
+.terminal-keys .button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 6px 10px;
 }
 .terminal-scroll {
   max-width: 100%;

@@ -6,7 +6,7 @@
 
 ## Pelacakan pekerjaan aktual
 
-Diperbarui 6 November 2026. Baca [MEMORY.md](MEMORY.md) untuk langkah implementasi,
+Diperbarui 7 November 2026. Baca [MEMORY.md](MEMORY.md) untuk langkah implementasi,
 aturan, hasil verifikasi, dan titik lanjut agent. Tabel ini mencatat status aktual;
 kata **Selesai** pada deskripsi task di bawah berarti *kriteria penerimaan*, bukan
 pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus.
@@ -19,7 +19,7 @@ pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus
 | T03 | PARTIAL | Login/ACL/CSRF/Origin/audit dan localhost-only diuji; live Serve/Grants negative tests belum. |
 | T10 | DONE | Key store/CLI configure-revoke, pin dan algoritme host key, tailnet address guard, bounded probe/API/UI; uji lokal dan CI Linux lulus. Uji tailnet nyata tetap T01/T03. |
 | T11 | DONE | Parser/epoch/revision, SSH snapshot, cache stale/revoke dan UI; uji tmux nyata terisolasi di macOS serta CI Linux lulus (empty/rename/split/kill/restart). |
-| T12 | PARTIAL | Viewer read-only eksperimental default disabled: sizing manual, PTY SSH, one-use ticket/WS, framing/buffer/audit, xterm.js, revoke/detach/shutdown tests. Interactive/device/access gates tetap terbuka. |
+| T12 | PARTIAL | Terminal eksperimental: default read-only, aktivasi interactive dengan izin/tiket baru, input bersequence/rate limit, PTY raw, Unicode/control dan revoke/no-replay tests. Gate perangkat/akses nyata masih terbuka. |
 | T13 | PARTIAL | Buka ulang manual/new ticket/reset read-only, no replay, alasan penutupan/revoke tersedia dan browser fixture lulus. Network switch/hub restart/perangkat nyata tetap terbuka. |
 | T20 | TODO | Mutasi session dengan epoch/revision, idempotency, konfirmasi/audit. |
 | T21 | TODO | Mutasi window/pane, snapshot pane dan suite dua transport. |
@@ -27,7 +27,7 @@ pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus
 | T23 | TODO | PTY Agent dan paritas mode terminal. |
 | T24 | TODO | Heartbeat, reconnect/jitter, capability refresh dan rekonsiliasi. |
 | T30 | TODO | Manifest/PWA/service worker asset-only, standalone dan uji perangkat. |
-| T31 | TODO | Toolbar keyboard/paste/hardware keyboard dan aksesibilitas; baru ada UI responsif dasar. |
+| T31 | PARTIAL | Tombol sentuh awal Esc/Tab/Ctrl+C/panah/Enter dan konfirmasi paste multiline tersedia. Modifier/prefix, aksesibilitas dan keyboard HP nyata belum tuntas. |
 | T32 | PARTIAL | Audit dasar dan redaction tests tersedia; filter/retensi/security review/fuzz belum. |
 | T33 | TODO | Packaging service, backup/restore, rollback runbook dan rotasi/revoke. |
 | T34 | TODO | Failure matrix dua transport dan kapasitas; gate rilis P0 belum lulus. |
@@ -60,11 +60,22 @@ Irisan T12/T13 read-only `6cdca59`: [CI Linux sukses](https://github.com/xibitz/
 termasuk SSH+PTY/tmux 3.8, bounded buffers, sizing spike dan build statis.
 Minimum viewer 3.7; tmux 3.6a bawaan runner ditolak karena bug manual sizing.
 Rincian temuan, batas dan langkah lanjut berada di MEMORY.md.
-Lengkapi T12 interactive berikutnya; gate versi/perangkat/akses T02/T03 tetap harus
+Lengkapi gate perangkat/akses T12 dan toolbar T31 berikutnya; gate versi/perangkat/akses T02/T03 tetap harus
 dipenuhi sebelum terminal dipakai pada host nyata. T10/T11 DONE tidak berarti M1
 atau rilis P0 sudah selesai.
 
 ## 1. Hasil akhir dan urutan rilis
+
+Checkpoint interactive T12 (pengujian lokal lulus; CI baru dicatat di MEMORY.md):
+
+- [x] Aktivasi eksplisit melalui REST CSRF/Origin, terminal:write dan tiket sekali pakai.
+- [x] Detach viewer lama, attach klien baru; viewer lain tidak ikut dilepas.
+- [x] Read-only tetap tanpa writer; ordinary reopen/reset target kembali read-only.
+- [x] Input framing/sequence/viewer binding, queue/rate limit, revoke per frame dan no retry.
+- [x] Raw PTY dan target client/session terikat; Unicode/Tab/Enter/Ctrl+C diuji dengan SSH/tmux nyata terisolasi.
+- [x] UI aktivasi/downgrade, toolbar awal, konfirmasi paste multiline dan viewport 393px melalui fixture.
+- [ ] HP fisik, Serve/Grants negatif dan gangguan jaringan nyata (gate T01/T03/T12/T13).
+- [ ] Modifier/prefix dan aksesibilitas lengkap T31; mutasi T20 belum dimulai.
 
 | Tahap | Prioritas | Hasil yang dapat didemokan | Gate keluar |
 |---|---:|---|---|

@@ -18,18 +18,18 @@ Yang sudah tersedia: hub localhost-only, SQLite WAL/migrasi 001–003, bootstrap
 admin, Argon2id/cookie sesi, ACL/CSRF/Origin, profil host, audit, UI responsif,
 allowlist SSH, Makefile/CI, **key store + CLI SSH configure/revoke, public host
 key pinning, probe dan inventaris tmux dengan epoch/revision serta cache stale**,
-serta viewer SSH read-only eksperimental (PTY/ticket/WS/xterm), default disabled.
+serta terminal SSH eksperimental (PTY/ticket/WS/xterm), default disabled dan
+read-only saat buka. Interactive tersedia melalui izin + aktivasi per viewer.
 
 Baseline sebelum irisan T12: `33466f0` (SSH/inventaris); dokumentasi awal handoff:
 `b7b8c1c`. Sebelumnya `1d8c1cf` (UX allowlist), `5c99762` (fondasi), `a879f8c`
 (rancangan). Commit dokumentasi sesudah kode tidak mengubah implementasinya.
 
-**T00, T10, T11 DONE. T02/T03/T12/T13/T32 PARTIAL. Task lain TODO.
-Berikutnya melengkapi T12 interactive dan gate akses/perangkat.**
+**T00, T10, T11 DONE. T02/T03/T12/T13/T31/T32 PARTIAL. Task lain TODO.
+Berikutnya gate akses/perangkat T03/T12, toolbar T31 dan mutasi T20.**
 DONE pada T10/T11 berarti acceptance kode/automated tests yang dicatat telah
-lulus, bukan bukti sshd/tailnet/HP pengguna sudah diuji. Agent dan terminal
-interaktif belum tersedia; M1 dan gate rilis P0 belum selesai. Viewer read-only
-hanya tersedia dengan opt-in operator, bukan rilis P0 yang telah lulus gate.
+lulus, bukan bukti sshd/tailnet/HP pengguna sudah diuji. Agent belum tersedia; M1 dan gate rilis P0 belum selesai. Terminal memerlukan
+opt-in operator, bukan rilis P0 yang telah lulus gate.
 
 ## Tasklist dan langkah implementasi
 
@@ -50,8 +50,8 @@ Kotak task hanya dicentang setelah gate task tersebut benar-benar selesai.
    Host yang dapat dihubungi tetapi tidak punya server tmux bukan host mati.
 4. **Terminal SSH (T12–T13).** Kebijakan manual tanpa desktop, PTY,
    tiket sekali pakai, WebSocket/framing/sequence, buffer bounded, xterm dan
-   read-only server + tmux tersedia sebagai irisan eksperimental. Interactive
-   perlu izin dan aktivasi per viewer. Reconnect reset read-only, tanpa replay.
+   read-only server + tmux serta interactive berizin tersedia sebagai irisan
+   eksperimental. Interactive memerlukan izin dan aktivasi per viewer. Reconnect reset read-only, tanpa replay.
 5. **Mutasi dan Agent (T20–T24).** Implementasikan epoch/revision, idempotency,
    konfirmasi/audit; CRUD tmux; enrollment/revoke, PTY, heartbeat/generation dan
    rekonsiliasi Agent. Jalankan suite kontrak sama pada dua transport.
@@ -269,25 +269,90 @@ Bukti checkpoint lokal:
   server_test.go. SSH/output disimulasikan, WS/login/CSRF/SQLite/CSP nyata; viewer
   fixture ditutup setelah 10 heartbeat agar manual reopen bisa diuji.
 
+## Checkpoint T12 interactive (7 November)
+
+Implementasi melanjutkan baseline `fb4d840`. Status tetap **T12/T13/T31 PARTIAL**:
+fungsi kode dan fixture telah tersedia, sedangkan gate perangkat/Serve-Grants
+nyata, keyboard/modifier lengkap dan network switching belum selesai.
+
+Langkah yang sudah dikerjakan:
+1. Kontrak diperluas **sebelum kode** di docs/api-v1.md. Mode menggunakan REST
+   `POST /terminal/viewers/{id}/mode-tickets` (Origin+CSRF+owner login), bukan
+   mutasi flag in-band. Izin `tmux:read` dan `terminal:write` diverifikasi untuk
+   interactive. Default `/terminal/tickets` menolak field mode dan tetap readonly.
+2. `internal/httpapi/terminal_mode.go`: satu transisi per viewer, audit intent
+   sebelum detach, cancel/wait cleanup viewer lama, revalidasi akses dan tiket
+   baru15detik/sekali pakai. Login token + host/socket/keyref/epoch/session + mode
+   terikat ke tiket. Viewer ID baru/generation1 menjadi namespace input baru;
+   tidak perlu menaikkan generation pada socket yang sama. Mode failure tidak
+   replay input; buka ulang generik kembali readonly. Mode API tidak membuat
+   kredensial persisten atau menyentuh flag client desktop.
+3. `internal/connector/ssh/terminal.go`: `OpenInteractiveTerminal` mengembalikan
+   `InputTerminal.WriteInput(ctx,bytes)`, sedangkan `OpenTerminal` tidak punya
+   writer. Katalog interactive attach hanya `ignore-size`; sizing/version/pin
+   dan setup policy sama. Prefix katalog `tty` memberi identitas PTY yang
+   dikonsumsi connector (maksimal128byte), bukan dikirim ke renderer. Klien pada
+   tty itu harus tetap berada di native session terpilih; fresh list-clients
+   dicek saat attach dan periodic Check. Explicit switch-client ke session lain
+   terdeteksi walaupun session asal masih hidup. Write maksimal16KiB, deadline2detik, short/error write
+   menutup koneksi tanpa retry. Tidak ada metode resize viewport.
+4. PTY memakai raw modes (ECHO/ICANON/ISIG/IEXTEN/CR mapping/flow control off),
+   supaya Ctrl+C melewati outer tty ke pane. Fixture awal menangkap Ctrl+C yang
+   mengenai tmux client sebelum siap; fixture kini memvalidasi request modes dan
+   menyiapkan raw slave sebelum child dijalankan. Real SSH+PTY/tmux test lulus
+   tiga kali: Unicode/Tab/Enter masuk byte-exact ke cat test, attach/detach
+   mempertahankan kedua ukuran, Ctrl+C memutus cat yang dituju, window lain dan
+   session tetap ada. Semua pada socket/key/data sementara, bukan host pengguna.
+5. Gateway membaca input hanya pada mode interactive: header30bytes arah1,
+   generation1, viewer raw16bytes, sequence terpisah dari output mulai1. Maksimal
+   payload16KiB, antrean8frame (128KiB), bucket64KiB/s burst32KiB. Cek sesi/read/
+   write ACL/keyref **setiap frame** sebelum SSH write; policy/epoch juga tetap
+   dipoll. Input mismatch/gap/replay/overflow/error => close, tidak retry. Audit
+   hanya metadata mode/target/alasan; hasil open interactive ditandai terpisah.
+6. UI `TerminalViewer.tsx`: konfirmasi Aktivasi, mode interaktif + tombol kembali
+   readonly, input Unicode/onBinary, tombol awal Esc/Tab/Ctrl+C/panah/Enter.
+   Mode ticket hanya dipakai sekali dan terikat scope host/session/epoch pada
+   state; ordinary reopen/scope change menggunakan readonly ticket. Byte lama
+   tidak diantrekan untuk reconnect. Input dipause saat transisi. Clipboard
+   multiline <=16KiB ditinjau/dikonfirmasi, pending paste dibuang saat close/mode
+   change. Fokus dipindah ke pembatalan paste; setelah confirm kembali ke terminal.
+   Nonce CSP, OSC52 block, link noop dan window operation block tetap berlaku.
+   Header konteks/status/mode menempel saat modal digulir pada layar kecil.
+7. Suite Go menambah bukti: owner login (termasuk login lain user sama), CSRF/
+   Origin, concurrent transition, permission grant + per-frame revoke, frame
+   viewer/direction/generation/sequence, replay, failure-no-retry, flood bounded,
+   audit failure tidak detach/activate. `make check test build` lokal lulus;
+   suite final diulang sesudah binding TTY dan seluruh check/test/build lulus.
+   Test tambahan flood
+   dan audit failure -race lulus. CI source terbaru masih perlu dicatat di bawah.
+8. Browser fixture production-CSP telah menguji read-only → interactive, keyboard
+   Unicode, Enter/Ctrl+C, paste sebelum confirm tidak muncul pada output dan
+   setelah confirm kedua baris muncul, downgrade readonly menghasilkan textarea
+   readonly dan output/input lama hilang. Viewport393px: page393, dialog359,
+   ketiga style nonce, tanpa console error/warn. Screenshot final dan CI dicatat
+   setelah checkpoint. Screenshot final:
+   `/Users/yasho/.codex/visualizations/2026/11/06/01a1afc8-c2a7-70c3-9eba-3da9aa5e9063/terminal-interactive-mobile.jpg`.
+   Ini output echo simulasi UI; protokol SSH/PTY nyata diuji
+   terpisah pada test socket. Bukan bukti HP fisik atau host nyata.
+
 ## Titik lanjut tepat
 
-1. Baca status CI/commit terbaru di bawah. Cek git status dan perubahan pengguna.
-2. Lengkapi negative access Serve/Grants serta host/tmux/device matrix yang
-   tersedia sebelum menyatakan terminal layak rilis. User melaporkan SSH berhasil,
-   tetapi itu bukan bukti smoke terminal atau HP nyata yang kita jalankan.
-3. Untuk T12 interactive: tulis kontrak set_mode + terminal:write + nonce/mode
-   generation terlebih dahulu. Jangan menambahkan Write ke gateway read-only
-   tanpa desain autentikasi/ACL/revalidasi/mode reset yang diuji. Identifikasi
-   client tmux tepat atau detach read-only lalu attach client baru saat aktivasi;
-   jangan mengubah flag klien desktop secara tidak sengaja.
-4. Tambahkan input Unicode/control keys, bounded input framing dan explicit
-   activation per viewer. Resize HP tetap tidak otomatis mengubah window. Semua
-   reconnect/reopen/host switch reset read-only dan tidak replay input ambigu.
-5. Uji mode switching/detach/revoke selama input, hub restart dan network switch,
-   slow consumer, clipboard/paste sensitif serta mobile keyboard Android/iOS.
-6. Lengkapi T13 error taxonomy (termasuk stale target/window navigation), lalu
-   T20 mutasi epoch/revision/idempotency. Jangan melewati gate agar checklist hijau.
-7. Jalankan check/test/build serta CI; update memory/status dan push melalui SSH.
+1. Baca hasil CI/commit checkpoint interactive terbaru. Cek git status dan
+   perubahan pengguna. `.env` dan runtime pengguna tidak diubah/restart.
+2. Lengkapi negative access Serve/Grants dan device matrix T01/T03. Minimum
+   tmux3.7 tetap wajib; default manual pada tmux3.6a bisa crash. Jangan merendahkan
+   gate minimum untuk membuat terminal bekerja di host lama; lihat ADR0001.
+3. T31: modifier Ctrl/Alt/Shift, prefix tmux, keyboard fisik/IME Android+iOS,
+   clipboard sensitif dan aksesibilitas perangkat nyata. Toolbar saat ini baru
+   subset awal, bukan klaim T31 DONE. Input membagi session dengan desktop.
+4. T13: uji real network switch/sleep/hub restart dan error taxonomy final;
+   mode activation/reopen harus tetap readonly dan tanpa replay. Input yang
+   sudah in-flight pada waktu revoke/disconnect mungkin sudah diproses remote;
+   jangan menjanjikan undo/zero input secara retroaktif.
+5. T20: kontrak epoch/revision/idempotency untuk mutasi tmux, revalidasi target,
+   konfirmasi kill dan audit sebelum menjalankan operasi. Tidak ada raw shell
+   administratif/kill-server API. T21+ setelah kontrak T20 selesai.
+6. Ikuti aturan implementasi di atas; perbarui memory/tasklist/CI dan push SSH.
 
 Catatan onboarding: target-host.pub harus disediakan operator; bukan dibuat oleh
 ssh-keygen -lf. Endpoint Tailscale SSH bisa menyajikan key lain dari OpenSSH
@@ -304,7 +369,7 @@ baru). Startup menjalankan migrasi 003 secara otomatis dan mempertahankan data
 001/002. CLI SSH harus memakai TMUX_MONITOR_DATA_DIR yang sama. Frontend Vite tetap
 pada 5173; backend 8080 untuk konfigurasi dev yang sekarang didokumentasikan.
 
-Viewer SSH read-only eksperimental tersedia dengan opt-in; Agent dan interactive
-belum tersedia. Tidak ada proses tmux/host pengguna
+Terminal SSH eksperimental tersedia dengan opt-in dan aktivasi input terpisah;
+Agent belum tersedia. Tidak ada proses tmux/host pengguna
 atau credential nyata yang dipakai selama pengujian. Temp browser fixture sudah
 dihentikan; proses pengembangan pengguna dibiarkan berjalan untuk mereka restart.

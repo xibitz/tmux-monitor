@@ -1425,7 +1425,7 @@ function HostDetails({
             <Eye size={16} />
             <span>
               {terminalEnabled
-                ? "Viewer terminal tersedia dalam mode read-only. Input interaktif masih dalam pengembangan."
+                ? "Viewer dimulai dalam read-only. Input dapat diaktifkan secara sadar jika Anda memiliki izin mengirim input."
                 : "Viewer terminal belum diaktifkan oleh operator hub. Inventaris tetap dapat diperiksa."}
             </span>
           </div>

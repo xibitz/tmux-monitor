@@ -27,6 +27,7 @@ type terminalOpener interface {
 type terminalTicket struct {
 	UserID, TokenHash, HostID, Socket, KeyRef, Target, Epoch string
 	Expires                                                  time.Time
+	Mode                                                     string
 }
 
 var sessionTarget = regexp.MustCompile(`^\$[0-9]{1,16}$`)
@@ -59,22 +60,8 @@ func (s *Server) terminalTicket(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, 404, "not_found", "Host SSH tidak tersedia atau tidak diizinkan.")
 		return
 	}
-	t := terminalTicket{UserID: u.ID, TokenHash: identity.TokenHash(token(r)), HostID: h.ID, Socket: h.SocketName, KeyRef: record.KeyRef, Target: body.SessionID, Epoch: body.Epoch, Expires: time.Now().Add(30 * time.Second)}
-	raw := storage.ID("") + storage.ID("")
-	s.viewMu.Lock()
-	count := 0
-	for hash, ticket := range s.tickets {
-		if time.Now().After(ticket.Expires) {
-			delete(s.tickets, hash)
-		} else if ticket.TokenHash == t.TokenHash {
-			count++
-		}
-	}
-	allowed := len(s.tickets) < 64 && count < 8
-	if allowed {
-		s.tickets[identity.TokenHash(raw)] = t
-	}
-	s.viewMu.Unlock()
+	t := terminalTicket{UserID: u.ID, TokenHash: identity.TokenHash(token(r)), HostID: h.ID, Socket: h.SocketName, KeyRef: record.KeyRef, Target: body.SessionID, Epoch: body.Epoch, Mode: "read_only"}
+	raw, allowed := s.issueTerminalTicket(t, 30*time.Second)
 	if !allowed {
 		s.fail(w, r, 429, "busy", "Terlalu banyak permintaan viewer. Tunggu 30 detik.")
 		return
@@ -134,6 +121,10 @@ func (s *Server) terminalUpgrade(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, 404, "not_found", "Host SSH tidak tersedia atau tidak diizinkan.")
 		return
 	}
+	if err := s.checkViewer(r.Context(), r, t); err != nil {
+		s.fail(w, r, 403, "forbidden", "Akses viewer tidak lagi berlaku.")
+		return
+	}
 	viewer := storage.ID("")
 	s.viewMu.Lock()
 	users, hosts := 0, 0
@@ -147,7 +138,7 @@ func (s *Server) terminalUpgrade(w http.ResponseWriter, r *http.Request) {
 	}
 	allowed := !s.terminalClosing && len(s.viewers) < 8 && users < 4 && hosts < 4
 	if allowed {
-		s.viewers[viewer] = t
+		s.viewers[viewer] = &terminalViewer{terminalTicket: t, Done: make(chan struct{})}
 		s.terminalWG.Add(1)
 	}
 	s.viewMu.Unlock()
@@ -155,7 +146,16 @@ func (s *Server) terminalUpgrade(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, 429, "busy", "Batas viewer aktif tercapai. Tutup viewer lain terlebih dahulu.")
 		return
 	}
-	defer func() { s.viewMu.Lock(); delete(s.viewers, viewer); s.viewMu.Unlock(); s.terminalWG.Done() }()
+	s.viewMu.Lock()
+	reservation := s.viewers[viewer]
+	s.viewMu.Unlock()
+	defer func() {
+		s.viewMu.Lock()
+		delete(s.viewers, viewer)
+		s.viewMu.Unlock()
+		close(reservation.Done)
+		s.terminalWG.Done()
+	}()
 	// Origin was compared byte-for-byte by authorize. Accept also performs its
 	// own host-based check; do not use InsecureSkipVerify.
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{Subprotocols: []string{"tmux.v1"}, OriginPatterns: []string{strings.TrimPrefix(strings.TrimPrefix(s.cfg.Origin, "https://"), "http://")}, CompressionMode: websocket.CompressionDisabled})
@@ -182,26 +182,46 @@ func (s *Server) serveTerminal(r *http.Request, conn *websocket.Conn, t terminal
 	conn.SetReadLimit(64 * 1024)
 	var wg sync.WaitGroup
 	defer func() { _ = conn.CloseNow(); wg.Wait() }()
+	s.viewMu.Lock()
+	s.viewers[viewer].Cancel = cancel
+	s.viewMu.Unlock()
+	incoming := make(chan []byte, 8)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		// Read cancellation closes the WebSocket immediately. Leave this reader
-		// alive until CloseNow so the writer can send a final reason first.
-		kind, data, err := conn.Read(context.Background())
-		if err != nil {
-			cancel(errors.New("disconnected"))
+		for {
+			kind, data, err := conn.Read(context.Background())
+			if err != nil {
+				cancel(errors.New("disconnected"))
+				return
+			}
+			if kind == websocket.MessageBinary && t.Mode == "interactive" {
+				if len(data) <= 30 || len(data) > 30+16384 {
+					cancel(errors.New("input_limit"))
+					return
+				}
+				select {
+				case incoming <- data:
+				case <-ctx.Done():
+					return
+				default:
+					cancel(errors.New("input_limit"))
+					return
+				}
+				continue
+			}
+			var control struct {
+				Type string `json:"type"`
+			}
+			decoder := json.NewDecoder(bytes.NewReader(data))
+			decoder.DisallowUnknownFields()
+			if kind == websocket.MessageText && decoder.Decode(&control) == nil && control.Type == "terminal.detach" && decoder.Decode(new(any)) == io.EOF {
+				cancel(errors.New("detached"))
+				return
+			}
+			cancel(errors.New("input_forbidden"))
 			return
 		}
-		var control struct {
-			Type string `json:"type"`
-		}
-		decoder := json.NewDecoder(bytes.NewReader(data))
-		decoder.DisallowUnknownFields()
-		if kind == websocket.MessageText && decoder.Decode(&control) == nil && control.Type == "terminal.detach" && decoder.Decode(new(any)) == io.EOF {
-			cancel(errors.New("detached"))
-			return
-		}
-		cancel(errors.New("input_forbidden"))
 	}()
 	writeJSON := func(value any) error {
 		data, _ := json.Marshal(value)
@@ -209,7 +229,16 @@ func (s *Server) serveTerminal(r *http.Request, conn *websocket.Conn, t terminal
 		defer done()
 		return conn.Write(deadline, websocket.MessageText, data)
 	}
-	stream, err := s.terminal.OpenTerminal(ctx, sshconnector.Host{ID: h.ID, Address: h.TailnetAddress, User: h.OSUser, Socket: h.SocketName}, record, t.Target, t.Epoch)
+	opener := s.terminal.OpenTerminal
+	if t.Mode == "interactive" {
+		interactive, ok := s.terminal.(interactiveOpener)
+		if !ok {
+			cancel(errors.New("interactive_unavailable"))
+			return
+		}
+		opener = interactive.OpenInteractiveTerminal
+	}
+	stream, err := opener(ctx, sshconnector.Host{ID: h.ID, Address: h.TailnetAddress, User: h.OSUser, Socket: h.SocketName}, record, t.Target, t.Epoch)
 	if err == nil {
 		err = s.checkViewer(ctx, r, t)
 	}
@@ -227,12 +256,16 @@ func (s *Server) serveTerminal(r *http.Request, conn *websocket.Conn, t terminal
 		return
 	}
 	defer stream.Close()
-	if err = s.terminalAudit(r, t, "terminal.open", "success"); err != nil {
+	result := "success"
+	if t.Mode == "interactive" {
+		result = "success_interactive"
+	}
+	if err = s.terminalAudit(r, t, "terminal.open", result); err != nil {
 		cancel(errors.New("audit_unavailable"))
 		return
 	}
 	cols, rows := stream.Size()
-	if err = writeJSON(map[string]any{"type": "terminal.opened", "viewerId": viewer, "mode": "read_only", "cols": cols, "rows": rows, "generation": 1, "sequence": 0}); err != nil {
+	if err = writeJSON(map[string]any{"type": "terminal.opened", "viewerId": viewer, "mode": t.Mode, "canWrite": s.canWriteTerminal(ctx, r, t), "cols": cols, "rows": rows, "generation": 1, "sequence": 0}); err != nil {
 		cancel(errors.New("disconnected"))
 	}
 	defer func() {
@@ -295,11 +328,43 @@ func (s *Server) serveTerminal(r *http.Request, conn *websocket.Conn, t terminal
 		}
 	}()
 	id, _ := hex.DecodeString(viewer)
-	var sequence uint64
+	var sequence, inputSequence uint64
+	budget := float64(32 * 1024)
+	lastInput := time.Now()
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case frame := <-incoming:
+			if len(frame) <= 30 || frame[0] != 1 || frame[1] != 1 || binary.BigEndian.Uint32(frame[2:6]) != 1 || binary.BigEndian.Uint64(frame[6:14]) != inputSequence+1 || !bytes.Equal(frame[14:30], id) {
+				cancel(errors.New("input_invalid"))
+				return
+			}
+			now := time.Now()
+			budget = min(float64(32*1024), budget+now.Sub(lastInput).Seconds()*64*1024)
+			lastInput = now
+			if float64(len(frame)-30) > budget {
+				cancel(errors.New("input_limit"))
+				return
+			}
+			budget -= float64(len(frame) - 30)
+			if err := s.checkViewer(ctx, r, t); err != nil {
+				cancel(errors.New("access_revoked"))
+				return
+			}
+			input, ok := stream.(sshconnector.InputTerminal)
+			if !ok {
+				cancel(errors.New("input_forbidden"))
+				return
+			}
+			inputSequence++
+			writeCtx, done := context.WithTimeout(ctx, 2*time.Second)
+			err := input.WriteInput(writeCtx, frame[30:])
+			done()
+			if err != nil {
+				cancel(errors.New("input_uncertain"))
+				return
+			}
 		case data := <-queue:
 			sequence++
 			frame := make([]byte, 30+len(data))
@@ -345,6 +410,9 @@ func (s *Server) checkViewer(ctx context.Context, r *http.Request, t terminalTic
 	}
 	h, record, err := s.terminalAccess(ctx, u, t.HostID)
 	if err != nil || record.KeyRef != t.KeyRef || h.SocketName != t.Socket {
+		return identity.ErrCredentials
+	}
+	if t.Mode == "interactive" && !s.canWriteTerminal(ctx, r, t) {
 		return identity.ErrCredentials
 	}
 	return nil

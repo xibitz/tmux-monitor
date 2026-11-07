@@ -46,7 +46,7 @@ type Server struct {
 	terminal         terminalOpener
 	viewMu           sync.Mutex
 	tickets          map[string]terminalTicket
-	viewers          map[string]terminalTicket
+	viewers          map[string]*terminalViewer
 	terminalInterval time.Duration
 	terminalRoot     context.Context
 	stopTerminals    context.CancelFunc
@@ -55,7 +55,7 @@ type Server struct {
 }
 
 func New(db *sql.DB, cfg config.Config, assets fs.FS, logger *slog.Logger) *Server {
-	s := &Server{db: db, cfg: cfg, assets: assets, log: logger, tickets: map[string]terminalTicket{}, viewers: map[string]terminalTicket{}, terminalInterval: 2 * time.Second}
+	s := &Server{db: db, cfg: cfg, assets: assets, log: logger, tickets: map[string]terminalTicket{}, viewers: map[string]*terminalViewer{}, terminalInterval: 2 * time.Second}
 	s.terminalRoot, s.stopTerminals = context.WithCancel(context.Background())
 	manager := sshconnector.New(s.credentials(), cfg.AllowedSSHHosts)
 	s.ssh = manager
@@ -75,6 +75,7 @@ func New(db *sql.DB, cfg config.Config, assets fs.FS, logger *slog.Logger) *Serv
 	api.HandleFunc("GET /api/v1/audit", s.listAudit)
 	api.HandleFunc("GET /api/v1/terminal/options", s.terminalOptions)
 	api.HandleFunc("POST /api/v1/terminal/tickets", s.terminalTicket)
+	api.HandleFunc("POST /api/v1/terminal/viewers/{viewer}/mode-tickets", s.terminalModeTicket)
 	api.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, 404, "not_found", "Endpoint tidak ditemukan.")
 	})

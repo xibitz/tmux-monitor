@@ -78,12 +78,12 @@ No stale snapshot is presented as live. With no cache, failures are sanitized
 422 configuration/validation, 423 unreachable, 429 busy, or 503 degraded/unsupported.
 No raw SSH/command stderr is returned or persisted. Probe failures are audited.
 
-## Experimental SSH read-only terminal (T12, partial)
+## Experimental SSH terminal (T12, partial)
 
 Disabled by default: operator must set `TMUX_MONITOR_TERMINAL_ENABLED=true`.
 This is a development slice, not completion of the P0 access/device gates.
-Only SSH session viewing is available; interactive input and viewport resizing
-are rejected. No automatic reconnect or input replay. All requests require login.
+SSH session viewers start read-only. Interactive activation is described below;
+viewport resize remains rejected. No automatic reconnect or input replay. All requests require login.
 
 `GET /api/v1/terminal/options` returns `{enabled,mode:"read_only"}`.
 `POST /api/v1/terminal/tickets` requires exact Origin, REST CSRF and `tmux:read`.
@@ -101,7 +101,10 @@ needed on upgrade: the one-use ticket was issued by a CSRF-protected POST.
 The connector freshly verifies the pinned SSH host, OS user, tmux server epoch
 and session. Requires tmux >=3.7, global default `window-size manual` and every
 window in the selected session effectively `manual`. The application never
-changes remote options. Otherwise it reports `terminal_size_policy` and does not
+changes remote options. The fixed attach catalog prints its SSH PTY identity
+first; the connector consumes that line and verifies that exact tmux client
+remains on the selected native session. Client switch or loss closes the viewer
+on its next policy check. This metadata is not forwarded as terminal output. Otherwise it reports `terminal_size_policy` and does not
 attach. The PTY uses the active remote window size plus its status rows (maximum
 500 columns / 205 rows); it does not follow browser dimensions. Attach uses
 `read-only,ignore-size`. Policy/target/epoch and login/ACL/credential reference
@@ -113,18 +116,59 @@ remote options during viewing can affect tmux before the next check.
 there is no second `terminal.open` message. Each binary output frame has a
 30-byte header: version uint8=1, direction uint8=0 (server output), generation
 uint32BE=1, sequence uint64BE starting at 1, viewer ID raw 16 bytes; then PTY bytes.
-Chunks <=32 KiB; incoming message limit 64 KiB. Any client binary/input/mode or
-resize request closes with `input_forbidden` (no bytes sent to SSH stdin).
-Only `{"type":"terminal.detach"}` is accepted from the client.
+Chunks <=32 KiB; incoming message limit 64 KiB. Read-only binary input, in-band mode changes and
+resize requests close with `input_forbidden` (no bytes sent to SSH stdin).
+Read-only accepts only `{"type":"terminal.detach"}` from the client;
+interactive binary frames follow the activation contract below.
 
 `terminal.closed` contains `reason`; `error` contains sanitized `code`;
 `resync_required` asks for a fresh viewer after backpressure. Queue maximum
 1 MiB per viewer, write deadline 2 seconds, viewer lifetime 30 minutes. Closing
 only detaches the SSH client. No terminal contents are cached or audited.
 Audit open/close/denial records include host, epoch/native target and reason.
-The browser disables stdin, OSC52 clipboard, window manipulation and automatic
+The browser disables stdin in read-only, OSC52 clipboard, window manipulation and automatic
 link activation; xterm write backlog is capped. Manual reopening gets a new
-ticket, generation and empty renderer.
+ticket, viewer ID and empty renderer, starting in read-only/generation 1.
+
+### Explicit interactive activation
+
+Every ordinary `/terminal/tickets` request still creates **read_only**. It does
+not accept a mode field. `terminal.opened` additionally contains `canWrite` and
+`mode` (`read_only` or `interactive`). Interactive remains behind the existing
+operator terminal feature flag and the same sizing/version policy.
+
+`POST /api/v1/terminal/viewers/{viewerId}/mode-tickets` accepts `{mode}` with
+`interactive` or `read_only`, requires exact Origin + REST CSRF, an active viewer
+owned by the same login token, fresh `tmux:read`, and **terminal:write** for
+interactive. It records the requested mode, closes that viewer and waits for
+its SSH/client cleanup, then returns `{ticket,expiresIn:15}`. Unsupported, same-mode
+and concurrent transitions are rejected. The ticket is one-use, hashed, bound to
+the same target/epoch/socket/credential/login and requested mode. There is one
+transition per viewer. Failed/ambiguous transitions never replay input.
+
+The browser explicitly upgrades with this ticket to a **new viewer ID**, empty
+renderer and generation 1. Read-only uses the existing fixed attach command;
+interactive attaches a separate client with **ignore-size**, without read-only.
+The application never toggles flags of another tmux client. Failure to open a
+replacement leaves the old viewer detached. Generic reopen/reconnect always uses
+a new ordinary read-only ticket. In-band `terminal.set_mode` and resize messages
+remain rejected; the mode changes only through the CSRF-protected REST flow.
+
+Interactive binary input uses the same 30-byte header, direction=1, generation=1,
+that connection's viewer ID, and a separate strictly increasing input sequence
+starting at 1. Payload 1–16384 bytes, queue <=8 frames (128 KiB), token bucket
+64 KiB/s with 32 KiB burst. Header/generation/sequence mismatch, readonly input,
+overflow/rate limit, revoked access or failed write closes the viewer. Each frame
+checks the current login/read/write ACL and credential reference before writing;
+SSH writes have a 2-second deadline and no retry/replay. Policy/epoch checks also
+continue periodically on the bound SSH connection. Input can include UTF-8 and
+control bytes. No input content is logged or audited.
+
+UI activation requires a deliberate confirmation for that viewer and displays
+the shared-session impact. Keyboard and small control-key buttons work only in
+interactive mode. Paste is capped at 16 KiB and multiline paste requires a review
+and explicit confirmation on every host. Pending paste/input is dropped when the
+connection/mode changes. OSC52, automatic links and window operations stay disabled.
 
 New reasons include `credentials_required`, `credentials_invalid`,
 `address_not_allowed`, `address_not_tailnet`, `host_key_mismatch`,
