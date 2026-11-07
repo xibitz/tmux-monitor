@@ -9,7 +9,7 @@ All timestamps use RFC 3339 UTC. All responses under `/api` and `/ws` use
 
 | Method and path | Authorization | Request / response |
 | --- | --- | --- |
-| `GET /healthz` | Local listener | `{"status":"ok","schemaVersion":3}`; 503 if storage is unavailable |
+| `GET /healthz` | Local listener | `{"status":"ok","schemaVersion":4}`; 503 if storage is unavailable |
 | `POST /api/v1/auth/login` | Exact configured Origin, rate limited | `{username,password}` → `{user,csrfToken}` and session cookie; generic 401 for invalid credentials |
 | `GET /api/v1/me` | Session | `{user:{id,username,isAdmin},csrfToken}` |
 | `POST /api/v1/auth/logout` | Session + CSRF | 204; revoke session and expire cookie |
@@ -77,6 +77,51 @@ always retains its original `observedAt` and is marked `stale:true` after failur
 No stale snapshot is presented as live. With no cache, failures are sanitized
 422 configuration/validation, 423 unreachable, 429 busy, or 503 degraded/unsupported.
 No raw SSH/command stderr is returned or persisted. Probe failures are audited.
+
+## Experimental session rename (T20, partial)
+
+Disabled by default: `TMUX_MONITOR_MUTATIONS_ENABLED=true`. Only SSH/tmux3.8
+rename is implemented; create/kill and Agent mutation parity remain unimplemented.
+`GET /api/v1/hosts/{id}/session-options` requires tmux:read and returns
+`{renameEnabled,canRename}`. Write requires tmux:read + tmux:write, login, exact
+Origin and CSRF. `PATCH /api/v1/hosts/{id}/sessions/{sid}` accepts only
+`{name,epoch,revision,confirmed:true}` and a random 32-hex `Idempotency-Key` header.
+New names are 1–64 ASCII letters/digits/underscore/hyphen, first character not
+hyphen. Native session ID is mandatory. Names affect all clients on that session.
+
+Sessions expose an additional `renameRevision`: hash of server epoch and session
+ID/name/creation time. Use it for this endpoint's `revision`; the existing tree
+`revision` remains for observation and future layout mutations. Window/pane
+activity does not invalidate a rename. A fresh SSH snapshot must match the epoch
+and renameRevision. Immediately before rename, a non-yielding tmux `if-shell -F`
+guard checks server pid/start/socket/version and session ID/creation/name on the
+tmux command queue. No raw shell, kill-server, resize, or custom command input.
+External rename/restart/removal produces conflict/not_found instead of retargeting
+by name. Hash revisions cannot detect an external change away and back to the
+identical state. External hooks run under the host operator's configuration.
+
+SQLite migration004 durably reserves (actor, hashed key, request hash, operation
+ID) and audits intent BEFORE remote execution. A fresh permission/credential check
+runs immediately before dispatch. Revocation cannot undo an operation already
+in flight. Requests are never retried automatically by hub or browser. The
+idempotency request hash binds host, native ID, epoch/revision, name and current
+credential reference. Same key/body returns its stored outcome after fresh access
+checks; a different body/credential is 409 idempotency_conflict. Pending records
+(concurrent request, lost reply, crashed hub) return 409 operation_uncertain and
+NEVER execute again, including after restart. Records are retained without expiry,
+maximum10000 globally; 429 operation_limit on exhaustion, with no automatic prune.
+Do not delete records to retry an uncertain operation; verify inventory first.
+
+200 `{operationId,state:"succeeded",sessionId}` confirms rename completed at the
+time of execution; it is not a fresh inventory. Refresh explicitly after success.
+400 malformed/unknown JSON, 409 conflict/duplicate_name/operation_uncertain,
+404 not_found, 422 invalid_request
+or tmux_unsupported, 429 busy/operation_limit, and existing SSH errors are sanitized.
+Unknown SSH/write/timeout outcomes are operation_uncertain, without retry. Cache
+is invalidated before dispatch; it is never used as mutation authority. Audit
+contains actor/host/epoch/native target/result only, not names, key or request body.
+Browser requires confirmation, clears drafts on close, and requires a fresh
+inventory before another attempt after failure. Gate host/device tests remain open.
 
 ## Experimental SSH terminal (T12, partial)
 

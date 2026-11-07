@@ -10,12 +10,13 @@ import (
 )
 
 type Config struct {
-	Listen          string
-	DataDir         string
-	Origin          string
-	Development     bool
-	TerminalEnabled bool
-	AllowedSSHHosts map[string]bool
+	Listen           string
+	DataDir          string
+	Origin           string
+	Development      bool
+	TerminalEnabled  bool
+	MutationsEnabled bool
+	AllowedSSHHosts  map[string]bool
 }
 
 func Load() (Config, error) {
@@ -33,6 +34,10 @@ func Load() (Config, error) {
 		if host = strings.TrimSpace(strings.ToLower(host)); host != "" {
 			c.AllowedSSHHosts[host] = true
 		}
+	}
+	c.MutationsEnabled, err = strconv.ParseBool(env("TMUX_MONITOR_MUTATIONS_ENABLED", "false"))
+	if err != nil {
+		return c, fmt.Errorf("TMUX_MONITOR_MUTATIONS_ENABLED must be true or false")
 	}
 	return c, c.Validate()
 }

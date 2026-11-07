@@ -15,7 +15,7 @@ func TestMigrationRollbackReapplyAndPermissions(t *testing.T) {
 	}
 	defer db.Close()
 	ctx := context.Background()
-	for _, version := range []int{1, 2, 3, 3, 2, 1, 0, 3} {
+	for _, version := range []int{1, 2, 3, 4, 4, 3, 2, 1, 0, 4} {
 		if err := Migrate(ctx, db, version); err != nil {
 			t.Fatal(err)
 		}
@@ -80,6 +80,40 @@ func TestTerminalAuditMigrationPreservesExistingAudit(t *testing.T) {
 	var target string
 	if err = db.QueryRow("SELECT target FROM audit_events").Scan(&target); err != nil || target != "" {
 		t.Fatal("legacy audit default invalid")
+	}
+}
+
+func TestOperationMigrationPreservesAuditAndExplicitRollback(t *testing.T) {
+	db, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	if err = Migrate(ctx, db, 3); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(`INSERT INTO audit_events(actor,action,result,request_id,at) VALUES ('test','prior','success','req_test',?)`, Now()); err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range []int{4, 3, 4} {
+		if err = Migrate(ctx, db, v); err != nil {
+			t.Fatal(err)
+		}
+		var count int
+		if err = db.QueryRow(`SELECT count(*) FROM audit_events WHERE action='prior'`).Scan(&count); err != nil || count != 1 {
+			t.Fatal("prior audit lost")
+		}
+	}
+	if _, err = db.Exec(`INSERT INTO tmux_operations(actor_id,key_hash,request_hash,operation_id,host_id,state,created_at,updated_at) VALUES ('test','hash','request','op_test','host','pending',?,?)`, Now(), Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err = Migrate(ctx, db, 4); err != nil {
+		t.Fatal(err)
+	}
+	var state string
+	if err = db.QueryRow(`SELECT state FROM tmux_operations WHERE operation_id='op_test'`).Scan(&state); err != nil || state != "pending" {
+		t.Fatal("startup lost durable reservation")
 	}
 }
 

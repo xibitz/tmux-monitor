@@ -44,6 +44,7 @@ type Server struct {
 	loginAttempts        int
 	ssh                  sshObserver
 	terminal             terminalOpener
+	mutations            sessionRenamer
 	viewMu               sync.Mutex
 	tickets              map[string]terminalTicket
 	viewers              map[string]*terminalViewer
@@ -62,6 +63,7 @@ func New(db *sql.DB, cfg config.Config, assets fs.FS, logger *slog.Logger) *Serv
 	manager := sshconnector.New(s.credentials(), cfg.AllowedSSHHosts)
 	s.ssh = manager
 	s.terminal = manager
+	s.mutations = manager
 	api := http.NewServeMux()
 	api.HandleFunc("POST /api/v1/auth/login", s.login)
 	api.HandleFunc("POST /api/v1/auth/logout", s.logout)
@@ -74,6 +76,8 @@ func New(db *sql.DB, cfg config.Config, assets fs.FS, logger *slog.Logger) *Serv
 	api.HandleFunc("PATCH /api/v1/hosts/{id}", s.updateHost)
 	api.HandleFunc("DELETE /api/v1/hosts/{id}", s.deleteHost)
 	api.HandleFunc("GET /api/v1/hosts/{id}/inventory", s.inventory)
+	api.HandleFunc("GET /api/v1/hosts/{id}/session-options", s.sessionOptions)
+	api.HandleFunc("PATCH /api/v1/hosts/{id}/sessions/{sid}", s.renameSession)
 	api.HandleFunc("GET /api/v1/audit", s.listAudit)
 	api.HandleFunc("GET /api/v1/terminal/options", s.terminalOptions)
 	api.HandleFunc("POST /api/v1/terminal/tickets", s.terminalTicket)

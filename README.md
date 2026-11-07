@@ -9,6 +9,7 @@ Hub Go dengan SQLite, login/ACL/CSRF, registri host, audit dan UI responsif ters
 Konektor SSH sekarang mendukung key khusus hub, pin host key, probe serta inventaris
 session/window/pane tmux dengan epoch dan cache stale. Asset web disertakan dalam
 binary hub setelah build. Kredensial dipasang melalui CLI lokal, bukan formulir.
+Ubah nama session SSH tersedia secara eksperimental dengan opt-in operator.
 
 **Terminal SSH tersedia secara eksperimental dan nonaktif secara default.**
 Viewer selalu dimulai read-only; input interaktif memerlukan izin dan aktivasi
@@ -18,13 +19,38 @@ worker, control mode, pairing agent, atau notifikasi. Gate rilis P0 belum lulus.
 Agent berikutnya mulai dari [MEMORY.md](MEMORY.md). Status setiap task dan gate
 berada di [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
+## Ubah nama session SSH eksperimental
+
+Aktifkan `TMUX_MONITOR_MUTATIONS_ENABLED=true` di environment backend, muat `.env`
+seperti langkah development, lalu restart hub dari source/build terbaru.
+Fitur ini memerlukan **tmux 3.8**, izin `tmux:read` + `tmux:write` (admin sudah
+memiliki izin), dan konfigurasi SSH terverifikasi. Terminal boleh tetap nonaktif.
+Create/kill session dan operasi Agent belum tersedia.
+
+Periksa koneksi/inventaris pada detail host, klik **Ubah nama**, isi nama baru,
+centang konfirmasi dampak bersama, lalu **Simpan nama session**. Nama baru memakai
+1–64 huruf ASCII, angka, `_` atau `-`, karakter pertama bukan `-`. Perubahan nama
+terlihat oleh semua klien tmux. Session/proses/window tidak dihentikan.
+
+Hub memeriksa identitas server/session dan revision terbaru sebelum mengubah nama.
+Jika nama/target berubah dari klien lain, muat inventaris baru. Request tidak
+dikirim ulang otomatis. Jika hasil belum pasti, **Periksa inventaris** dahulu;
+jangan membuat operasi baru sebelum memeriksa apakah perubahan sudah terjadi.
+Catatan operasi persisten mencegah eksekusi ulang setelah restart hub, maksimal
+10000 catatan tanpa pembersihan otomatis. Jika batas tercapai, hub menolak operasi
+baru; jangan hapus catatan untuk memaksa retry hasil yang belum pasti.
+
+Build ini memakai **migrasi004**. Backup database sebelum upgrade. Downgrade ke
+schema3 menghapus catatan operasi dan perlindungan idempotensi terkait; hindari
+downgrade saat ada hasil operasi yang belum pasti. `.env` tidak dimuat otomatis.
+
 ## Terminal SSH eksperimental
 
 Setelah SSH/inventaris berfungsi, operator dapat mencoba viewer dengan
 `TMUX_MONITOR_TERMINAL_ENABLED=true` pada environment hub, lalu restart backend.
 Muat `.env` seperti langkah development di bawah. Jangan menganggap fitur ini
 sudah lulus pengujian HP nyata atau akses Serve/Grants; gate tersebut masih terbuka.
-Backend baru menjalankan migrasi **003** untuk target audit. Backup data sebelum
+Backend baru menjalankan migrasi sampai **004**. Backup data sebelum
 upgrade. CLI dan server harus tetap memakai direktori data yang sama.
 
 Di detail host, klik **Periksa koneksi** untuk inventaris baru, lalu **Buka
@@ -277,7 +303,7 @@ python3 scripts/tmux-spike.py
 ```
 
 Test mencakup batas jaringan, login, expiry/revoke, CSRF/Origin, default-deny ACL,
-validasi profil, audit atomik/redaksi, migrasi 001–003 naik/turun, WAL, permission
+validasi profil, audit atomik/redaksi, migrasi 001–004 naik/turun, WAL, permission
 file, host key mismatch, autentikasi SSH, tailnet-only dial, timeout/cancellation,
 output limit dan cache stale/revoke. Integrasi SSH memakai key/server protokol
 sementara dan tmux nyata pada socket test terpisah. CI membangun rilis resmi

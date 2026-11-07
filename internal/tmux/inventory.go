@@ -39,11 +39,12 @@ type Inventory struct {
 	Sessions     []Session    `json:"sessions"`
 }
 type Session struct {
-	ID        string   `json:"id"`
-	Name      string   `json:"name"`
-	CreatedAt int64    `json:"createdAt"`
-	Revision  string   `json:"revision"`
-	Windows   []Window `json:"windows"`
+	ID             string   `json:"id"`
+	Name           string   `json:"name"`
+	CreatedAt      int64    `json:"createdAt"`
+	Revision       string   `json:"revision"`
+	RenameRevision string   `json:"renameRevision"`
+	Windows        []Window `json:"windows"`
 }
 type Window struct {
 	ID       string `json:"id"`
@@ -221,7 +222,9 @@ func Parse(host, socket, version string, output []byte) (Inventory, error) {
 		if len(inv.Sessions[i].Windows) == 0 {
 			return inv, ErrChanged
 		}
-		inv.Sessions[i].Revision = digest("r_", inv.Epoch, canonical(inv.Sessions[i]))
+		s := &inv.Sessions[i]
+		s.RenameRevision = digest("rn_", inv.Epoch, s.ID, s.Name, strconv.FormatInt(s.CreatedAt, 10))
+		s.Revision = digest("r_", inv.Epoch, canonical(s))
 	}
 	return inv, nil
 }

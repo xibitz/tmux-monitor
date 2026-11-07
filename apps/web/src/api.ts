@@ -45,6 +45,7 @@ export type Inventory = {
     id: string;
     name: string;
     revision: string;
+    renameRevision: string;
     windows: {
       id: string;
       name: string;
@@ -94,10 +95,12 @@ export async function api<T>(
   path: string,
   method = "GET",
   body?: unknown,
+  operationKey?: string,
 ): Promise<T> {
   const headers: Record<string, string> = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (method !== "GET") headers["X-CSRF-Token"] = csrfToken;
+  if (operationKey) headers["Idempotency-Key"] = operationKey;
   let response: Response;
   try {
     response = await fetch(`/api/v1${path}`, {

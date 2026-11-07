@@ -14,7 +14,7 @@ Pengguna meminta development diteruskan dan status ditulis agar agent baru bisa
 melanjutkan tanpa mengandalkan riwayat chat. **Memory ini wajib diperbarui setelah
 checkpoint, sebelum berhenti, dan sebelum context/token habis.**
 
-Yang sudah tersedia: hub localhost-only, SQLite WAL/migrasi 001–003, bootstrap
+Yang sudah tersedia: hub localhost-only, SQLite WAL/migrasi 001–004, bootstrap
 admin, Argon2id/cookie sesi, ACL/CSRF/Origin, profil host, audit, UI responsif,
 allowlist SSH, Makefile/CI, **key store + CLI SSH configure/revoke, public host
 key pinning, probe dan inventaris tmux dengan epoch/revision serta cache stale**,
@@ -24,12 +24,14 @@ Toolbar interactive kini memiliki modifier sekali pakai, kolom kombinasi dan
 prefix control-key yang dapat dipilih lokal; keyboard fisik tetap melalui xterm.
 Terminal browser terbaru memakai tmux.v2 dengan heartbeat dan lease15detik;
 offline/putus tidak mengaktifkan input ulang. Hub tetap menerima legacy tmux.v1.
+Rename session SSH/tmux3.8 eksperimental tersedia dengan flag mutasi terpisah,
+konfirmasi, guard identitas dan ledger idempotensi persisten. Create/kill belum.
 
 Baseline sebelum irisan T12: `33466f0` (SSH/inventaris); dokumentasi awal handoff:
 `b7b8c1c`. Sebelumnya `1d8c1cf` (UX allowlist), `5c99762` (fondasi), `a879f8c`
 (rancangan). Commit dokumentasi sesudah kode tidak mengubah implementasinya.
 
-**T00, T10, T11 DONE. T02/T03/T12/T13/T31/T32 PARTIAL. Task lain TODO.
+**T00, T10, T11 DONE. T02/T03/T12/T13/T20/T31/T32 PARTIAL. Task lain TODO.
 Berikutnya gate akses/perangkat T03/T12/T31, gangguan T13 dan mutasi T20.**
 DONE pada T10/T11 berarti acceptance kode/automated tests yang dicatat telah
 lulus, bukan bukti sshd/tailnet/HP pengguna sudah diuji. Agent belum tersedia; M1 dan gate rilis P0 belum selesai. Terminal memerlukan
@@ -465,6 +467,63 @@ Langkah implementasi dan aturan untuk kelanjutan:
    Commit dokumen sesudahnya hanya mencatat hasil ini. .env/data/host/key dan
    proses pengguna tidak diubah/restart. Fixture/tab/viewport sudah dibersihkan.
 
+## Checkpoint T20 rename (7 November)
+
+Baseline `3681702`; T20 **PARTIAL**, hanya rename SSH/tmux3.8. Create/kill dan
+paritas Agent belum tersedia. Kontrak docs/api-v1.md ditulis sebelum kode dan
+keputusan/failure semantics tercatat di docs/adr/0003-session-rename.md.
+
+Langkah implementasi:
+1. `internal/tmux/inventory.go`: renameRevision terpisah dari tree revision,
+   hash(epoch,id,name,created). Perubahan pane/process tidak menggagalkan rename.
+   `rename.go`: new names ASCII `[A-Za-z0-9_][A-Za-z0-9_-]{0,63}` (tanpa titik),
+   wajib native session ID/epoch/revision/confirmed. Quoting shell/format terpisah.
+   Katalog if-shell -F non-yielding memeriksa pid/start/socket/version/id/created/
+   name sebelum rename; tidak ada shell job atau raw-command API. Qualified3.8
+   saja, terminal minimum3.7 tidak berubah. Hash tidak mendeteksi ABA nama identik.
+2. `internal/connector/ssh/rename.go`: bounded shared observation/mutation gate,
+   pin/address/user, fresh SSH snapshot, validasi expected epoch/renameRevision,
+   callback fresh ACL/login/key sebelum dispatch. Single write attempt. Marker
+   conflict/success dan duplicate error disanitasi; lost/invalid reply uncertain.
+   In-flight remote operation tidak bisa dibatalkan secara retroaktif oleh revoke.
+3. Migrasi004 `tmux_operations`: actor+hashed key, hashed body/target/credential,
+   operation ID, status/outcome metadata. Reserve pending + audit intent + hapus
+   cache dalam transaksi sebelum SSH. Completion + audit atomik; kegagalan
+   completion tetap pending dan melarang dispatch ulang. Key/body berbeda409,
+   pending/crash/restart409 uncertain, hasil done direplay setelah fresh akses.
+   Tidak ada expiry/prune otomatis; global10000 catatan lalu429. Jangan menghapus
+   ledger untuk memaksa retry. Downgrade4→3 menghapus perlindungan ledger; CLI
+   perlu allow-data-loss dan operator harus backup/rekonsiliasi dahulu.
+4. `internal/httpapi/session_rename.go`: GET host session-options, PATCH native
+   session, Origin/CSRF/login + tmux:read dan tmux:write. Flag defaultfalse
+   TMUX_MONITOR_MUTATIONS_ENABLED; `.env` pengguna tidak disentuh. Audit hanya
+   actor/host/epoch/id/result, bukan nama/raw key/body. API tidak mengembalikan
+   snapshot buatan; refresh inventaris sesudah hasil. Credentials rotate/revoke
+   tidak bisa memakai hasil operasi lama untuk request baru.
+5. `SessionRename.tsx`, main.tsx/api.ts/styles: tombol Ubah nama sesudah snapshot
+   fresh; field + konfirmasi dampak semua klien; input/double submit guarded,
+   per-intent random key dan tanpa retry. Sesudah error wajib refresh inventaris;
+   draft dibuang. Snapshot baru remount intent; close tidak replay/undo. UI
+   menonaktifkan mutasi pada versi tmux selain3.8. README/env.example berisi opt-in.
+6. Lokal `make check` + `make test` + `make build` lulus; 13 Node groups, semua
+   Go -race termasuk real SSH/PTY. Katalog tmux dan SSH rename menguji nama/path
+   dengan format syntax/koma/brace/quote/backslash, duplicate, external rename
+   tepat sebelum dispatch, revoke callback, epoch restart dan IDreuse. Suite API
+   menguji auth/ACL/CSRF/Origin, invalid payload, same-key replay/concurrency,
+   restart/pending, audit unavailable, completion fail, revoke dan quota10000.
+   Migrasi4 rollback/reapply dan pending reservation startup lulus. Fixture dua
+   session sempat memakai urutan nama sebagai target; sudah diperbaiki ke ID
+   eksplisit pada test, seluruh suite ulang lulus. Tidak ada data pengguna diuji.
+7. Browser fixture `TMUX_MONITOR_BROWSER_MUTATIONS=1`, production-CSP 393x852:
+   save disabled sebelum checkbox, duplicate_name menutup draft/no retry,
+   refresh sebelum intent baru, successful rename memperbarui snapshot; page393,
+   console tanpa warning/error. SSH rename di fixture UI disimulasikan; protokol
+   SSH/tmux nyata diuji terpisah di socket/key sementara. Screenshot hasil:
+   `/Users/yasho/.codex/visualizations/2026/11/06/01a1afc8-c2a7-70c3-9eba-3da9aa5e9063/session-rename-mobile.jpg`.
+   Fixture/tab/viewport sudah dibersihkan. .env/runtime/data/host pengguna tidak
+   diubah atau direstart. Bukti perangkat/host tailnet nyata tetap belum tersedia.
+8. Commit/push SSH dan bukti CI dicatat setelah checkpoint ini.
+
 ## Titik lanjut tepat
 
 1. Baca hasil CI/commit checkpoint interactive terbaru. Cek git status dan
@@ -479,9 +538,12 @@ Langkah implementasi dan aturan untuk kelanjutan:
    mode activation/reopen harus tetap readonly dan tanpa replay. Input yang
    sudah in-flight pada waktu revoke/disconnect mungkin sudah diproses remote;
    jangan menjanjikan undo/zero input secara retroaktif.
-5. T20: kontrak epoch/revision/idempotency untuk mutasi tmux, revalidasi target,
-   konfirmasi kill dan audit sebelum menjalankan operasi. Tidak ada raw shell
-   administratif/kill-server API. T21+ setelah kontrak T20 selesai.
+5. T20: rename sudah tersedia; lanjutkan create session dan kill session dengan
+   kontrak epoch/revision/idempotensi yang sesuai. Kill perlu typed confirmation,
+   fresh target guard dan audit intent; create perlu precondition socket/epoch
+   tanpa menyalakan server baru secara tidak sengaja. Jangan menyamakan guard
+   renameRevision dengan layout revision. Tidak ada raw-shell/kill-server API.
+   Ledger idempotensi retained harus tetap bertahan restart. T21+ sesudah T20.
 6. Ikuti aturan implementasi di atas; perbarui memory/tasklist/CI dan push SSH.
 
 Catatan onboarding: target-host.pub harus disediakan operator; bukan dibuat oleh
@@ -495,8 +557,8 @@ hostname atau fingerprint pribadi pengguna yang dicatat dalam repositori.
 Backend pengguna tidak direstart atau dimigrasi oleh agent pada pekerjaan ini.
 Untuk memakai source terbaru: hentikan backend lama, backup data penting, muat
 .env di terminal backend, lalu jalankan kembali `make dev` (atau build/binary
-baru). Startup menjalankan migrasi 003 secara otomatis dan mempertahankan data
-001/002. CLI SSH harus memakai TMUX_MONITOR_DATA_DIR yang sama. Frontend Vite tetap
+baru). Startup menjalankan migrasi sampai004 secara otomatis dan mempertahankan
+data001–003. CLI SSH harus memakai TMUX_MONITOR_DATA_DIR yang sama. Frontend Vite tetap
 pada 5173; backend 8080 untuk konfigurasi dev yang sekarang didokumentasikan.
 
 Terminal SSH eksperimental tersedia dengan opt-in dan aktivasi input terpisah;

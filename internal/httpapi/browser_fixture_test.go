@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -70,6 +71,30 @@ func TestBrowserFixture(t *testing.T) {
 	h.server.cfg.Origin = "http://localhost:18081"
 	h.server.cfg.Development = true
 	terminalMode := os.Getenv("TMUX_MONITOR_BROWSER_TERMINAL") == "1"
+	mutationMode := os.Getenv("TMUX_MONITOR_BROWSER_MUTATIONS") == "1"
+	var mutationMu sync.Mutex
+	fixtureName := "session-untuk-uji"
+	if mutationMode {
+		h.server.cfg.MutationsEnabled = true
+		h.server.cfg.Development = false
+		h.server.cfg.AllowedSSHHosts["test.example.ts.net"] = true
+		h.server.mutations = renameFunc(func(ctx context.Context, host sshconnector.Host, _ sshconnector.Record, sid string, request tmux.RenameRequest, authorize func(context.Context) error) error {
+			if err := authorize(ctx); err != nil {
+				return &sshconnector.Failure{Code: "access_revoked"}
+			}
+			mutationMu.Lock()
+			defer mutationMu.Unlock()
+			inv, err := tmux.Parse(host.ID, host.Socket, "3.8", []byte("F|123|1700000000|/tmp/fixture/default|3.8\nS\t$0\t"+fixtureName+"\t1700000001\nW\t$0\t@0\teditor\t0\t1\nP\t@0\t%0\t1\t120\t39\tzsh\nF|123|1700000000|/tmp/fixture/default|3.8\n"))
+			if err != nil || sid != "$0" || inv.Epoch != request.Epoch || inv.Sessions[0].RenameRevision != request.Revision {
+				return &sshconnector.Failure{Code: "conflict"}
+			}
+			if request.Name == "duplicate-test" {
+				return &sshconnector.Failure{Code: "duplicate_name"}
+			}
+			fixtureName = request.Name
+			return nil
+		})
+	}
 	if terminalMode {
 		h.server.cfg.TerminalEnabled = true
 		// Test browser deadline enforcement even while PTY output keeps flowing.
@@ -108,10 +133,12 @@ func TestBrowserFixture(t *testing.T) {
 	h.server.assets = webassets.Files()
 	var probes atomic.Int32
 	h.server.ssh = observerFunc(func(_ context.Context, host sshconnector.Host, _ sshconnector.Record) (tmux.Inventory, error) {
-		if probes.Add(1) > 1 && !terminalMode {
+		if probes.Add(1) > 1 && !terminalMode && !mutationMode {
 			return tmux.Inventory{}, &sshconnector.Failure{Code: "timeout"}
 		}
-		return tmux.Parse(host.ID, host.Socket, "3.8", []byte("F|123|1700000000|/tmp/fixture/default|3.8\nS\t$0\tsession-untuk-uji\t1700000001\nW\t$0\t@0\teditor\t0\t1\nP\t@0\t%0\t1\t120\t39\tzsh\nF|123|1700000000|/tmp/fixture/default|3.8\n"))
+		mutationMu.Lock()
+		defer mutationMu.Unlock()
+		return tmux.Parse(host.ID, host.Socket, "3.8", []byte("F|123|1700000000|/tmp/fixture/default|3.8\nS\t$0\t"+fixtureName+"\t1700000001\nW\t$0\t@0\teditor\t0\t1\nP\t@0\t%0\t1\t120\t39\tzsh\nF|123|1700000000|/tmp/fixture/default|3.8\n"))
 	})
 	listener, err := net.Listen("tcp", h.server.cfg.Listen)
 	if err != nil {

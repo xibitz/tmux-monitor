@@ -2,6 +2,25 @@ package config
 
 import "testing"
 
+func TestMutationsRequireExplicitOptIn(t *testing.T) {
+	t.Setenv("TMUX_MONITOR_ORIGIN", "https://hub.example.ts.net")
+	t.Setenv("TMUX_MONITOR_DEV", "false")
+	t.Setenv("TMUX_MONITOR_TERMINAL_ENABLED", "false")
+	for _, value := range []string{"", "true", "invalid"} {
+		t.Setenv("TMUX_MONITOR_MUTATIONS_ENABLED", value)
+		c, err := Load()
+		if value == "invalid" {
+			if err == nil {
+				t.Fatal("invalid mutation gate accepted")
+			}
+			continue
+		}
+		if err != nil || c.MutationsEnabled != (value == "true") {
+			t.Fatal("mutation opt-in invalid")
+		}
+	}
+}
+
 func TestTerminalRequiresExplicitOptIn(t *testing.T) {
 	t.Setenv("TMUX_MONITOR_ORIGIN", "https://hub.example.ts.net")
 	t.Setenv("TMUX_MONITOR_DEV", "false")

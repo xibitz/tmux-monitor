@@ -1,6 +1,7 @@
 import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { createRoot } from "react-dom/client";
+import { SessionRename } from "./SessionRename";
 import {
   Activity,
   ArrowLeft,
@@ -1110,6 +1111,21 @@ function HostDetails({
   const [metadataAttempt, setMetadataAttempt] = useState(0);
   const [inventory, setInventory] = useState<Inventory>();
   const [terminalEnabled, setTerminalEnabled] = useState(false);
+  const [canRename, setCanRename] = useState(false);
+  useEffect(() => {
+    let active = true;
+    if (host.transport === "ssh")
+      void api<{ canRename: boolean }>(
+        `/hosts/${encodeURIComponent(host.id)}/session-options`,
+      )
+        .then((options) => {
+          if (active) setCanRename(options.canRename);
+        })
+        .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [host.id, host.transport]);
   const [terminalSession, setTerminalSession] = useState<{
     id: string;
     name: string;
@@ -1362,6 +1378,11 @@ function HostDetails({
                   inventaris terakhir; data ini sudah stale.
                 </div>
               )}
+              {canRename && inventory.capabilities.tmuxVersion !== "3.8" && (
+                <p className="panel-description">
+                  Ubah nama session memerlukan tmux 3.8 yang telah diuji.
+                </p>
+              )}
               {inventory.sessions.length === 0 ? (
                 <p className="inventory-empty">
                   {inventory.capabilities.serverRunning
@@ -1386,6 +1407,23 @@ function HostDetails({
                           </button>
                         )}
                       </div>
+                      {canRename && session.renameRevision && (
+                        <SessionRename
+                          key={inventory.observedAt + session.id}
+                          hostId={host.id}
+                          session={session}
+                          epoch={inventory.epoch}
+                          disabled={
+                            inventory.stale ||
+                            busy ||
+                            inventory.capabilities.tmuxVersion !== "3.8"
+                          }
+                          onRefresh={() => {
+                            setInventory(undefined);
+                            void inspect();
+                          }}
+                        />
+                      )}
                       <ul>
                         {session.windows.map((window) => (
                           <li key={window.id}>

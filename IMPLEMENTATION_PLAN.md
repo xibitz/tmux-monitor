@@ -21,7 +21,7 @@ pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus
 | T11 | DONE | Parser/epoch/revision, SSH snapshot, cache stale/revoke dan UI; uji tmux nyata terisolasi di macOS serta CI Linux lulus (empty/rename/split/kill/restart). |
 | T12 | PARTIAL | Terminal eksperimental: default read-only, aktivasi interactive dengan izin/tiket baru, input bersequence/rate limit, PTY raw, Unicode/control dan revoke/no-replay tests. Gate perangkat/akses nyata masih terbuka. |
 | T13 | PARTIAL | Heartbeat v2 + ping/pong, deadline browser/input, offline/pagehide, mode-response fence dan reopen read-only tanpa replay tersedia. Uji idle/timeout/sequence/restart hub terisolasi dan browser fixture lulus. Network switch/sleep/perangkat nyata tetap terbuka. |
-| T20 | TODO | Mutasi session dengan epoch/revision, idempotency, konfirmasi/audit. |
+| T20 | PARTIAL | Rename SSH/tmux3.8: flag default-off, renameRevision, guard server, migrasi004 idempotensi, izin/konfirmasi/audit dan UI tersedia. Uji lokal SSH/race/API/browser lulus. Create/kill serta paritas Agent belum. |
 | T21 | TODO | Mutasi window/pane, snapshot pane dan suite dua transport. |
 | T22 | TODO | Enrollment/revoke Agent, credential, handshake/generation dan RPC. |
 | T23 | TODO | PTY Agent dan paritas mode terminal. |
@@ -91,6 +91,16 @@ make check/test/build lokal, 13 kelompok uji frontend serta fixture browser
 healthy-idle/missing-heartbeat/reopen lulus. Restart instance hub dengan database
 persisten diuji terisolasi; ini bukan bukti pindah jaringan/HP nyata. Lihat MEMORY.md
 untuk checkpoint commit/CI.
+
+Irisan T20 rename: opt-in `TMUX_MONITOR_MUTATIONS_ENABLED`, SSH/tmux3.8,
+schema004, fresh renameRevision + server guard dan idempotensi persisten.
+
+- [x] Kontrak, ADR0003, migrasi naik/turun yang mempertahankan audit lama.
+- [x] Guard identitas/nama, konflik nama duplikat, restart/ID reuse, validasi quoting.
+- [x] ACL/read+write, CSRF/Origin, audit-before-dispatch, revoke sebelum write.
+- [x] Replay/concurrency/uncertain result/restart tidak mengeksekusi lagi; ledger bounded.
+- [x] UI konfirmasi, refresh setelah hasil, browser fixture 393px dan checks lokal.
+- [ ] Create/kill dengan precondition/idempotensi/konfirmasi dan audit; Agent parity.
 
 | Tahap | Prioritas | Hasil yang dapat didemokan | Gate keluar |
 |---|---:|---|---|
