@@ -279,7 +279,12 @@ Run7379720 gagal pada startup PTY runner Ubuntu; diagnosis113610a menunjukkan
 metadata path TTY tanpa pemisah LF sebelum escape tmux. Koreksi berikutnya
 menggunakan frame NUL + fixed ready ack sebelum tmux dijalankan. Frame ini
 dikonsumsi connector; bukan input browser dan bukan output renderer. Tidak
-mengandalkan newline/flush terminal. Hasil CI koreksi akan dicatat di bawah.
+mengandalkan newline/flush terminal. Koreksi ada di `949f10b` dan **CI Ubuntu sukses**:
+https://github.com/xibitz/tmux-monitor/actions/runs/42317484080
+Suite -race, tmux 3.8 SSH+PTY, input/ACL/no-replay, spike ukuran, build web/hub,
+static Linux/amd64 tanpa CGO dan artifact lulus. Catatan hasil akhir sempat
+tertahan oleh kegagalan review otomatis akibat batas penggunaan; bukan
+penolakan keamanan atas perubahan. Pengembangan berikutnya melanjutkan T31.
 Uji tambahan Linux lokal: container baru dari image resmi yang sudah tersedia,
 tmux 3.8 dibangun dari tarball resmi/checksum yang sama; fixture SSH/PTY lulus
 (CGO=0 tanpa race). Tidak ada data/service/container pengguna yang dipakai.
@@ -343,7 +348,7 @@ Langkah yang sudah dikerjakan:
    audit failure tidak detach/activate. `make check test build` lokal lulus;
    suite final diulang sesudah binding TTY dan seluruh check/test/build lulus.
    Test tambahan flood
-   dan audit failure -race lulus. CI source terbaru masih perlu dicatat di bawah.
+   dan audit failure -race lulus. CI source `949f10b` lulus seperti tautan di atas.
 8. Browser fixture production-CSP telah menguji read-only → interactive, keyboard
    Unicode, Enter/Ctrl+C, paste sebelum confirm tidak muncul pada output dan
    setelah confirm kedua baris muncul, downgrade readonly menghasilkan textarea

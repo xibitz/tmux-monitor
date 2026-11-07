@@ -66,7 +66,8 @@ atau rilis P0 sudah selesai.
 
 ## 1. Hasil akhir dan urutan rilis
 
-Checkpoint interactive T12 (pengujian lokal lulus; CI baru dicatat di MEMORY.md):
+Checkpoint interactive T12 `949f10b`: [CI Ubuntu sukses](https://github.com/xibitz/tmux-monitor/actions/runs/42317484080),
+pengujian lokal dan browser fixture lulus; rincian dan langkah lanjut di MEMORY.md:
 
 - [x] Aktivasi eksplisit melalui REST CSRF/Origin, terminal:write dan tiket sekali pakai.
 - [x] Detach viewer lama, attach klien baru; viewer lain tidak ikut dilepas.
