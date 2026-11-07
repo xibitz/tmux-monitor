@@ -34,28 +34,30 @@ const (
 )
 
 type Server struct {
-	db               *sql.DB
-	cfg              config.Config
-	assets           fs.FS
-	log              *slog.Logger
-	router           http.Handler
-	loginMu          sync.Mutex
-	loginWindow      time.Time
-	loginAttempts    int
-	ssh              sshObserver
-	terminal         terminalOpener
-	viewMu           sync.Mutex
-	tickets          map[string]terminalTicket
-	viewers          map[string]*terminalViewer
-	terminalInterval time.Duration
-	terminalRoot     context.Context
-	stopTerminals    context.CancelFunc
-	terminalWG       sync.WaitGroup
-	terminalClosing  bool
+	db                   *sql.DB
+	cfg                  config.Config
+	assets               fs.FS
+	log                  *slog.Logger
+	router               http.Handler
+	loginMu              sync.Mutex
+	loginWindow          time.Time
+	loginAttempts        int
+	ssh                  sshObserver
+	terminal             terminalOpener
+	viewMu               sync.Mutex
+	tickets              map[string]terminalTicket
+	viewers              map[string]*terminalViewer
+	terminalInterval     time.Duration
+	terminalPingInterval time.Duration
+	terminalPingTimeout  time.Duration
+	terminalRoot         context.Context
+	stopTerminals        context.CancelFunc
+	terminalWG           sync.WaitGroup
+	terminalClosing      bool
 }
 
 func New(db *sql.DB, cfg config.Config, assets fs.FS, logger *slog.Logger) *Server {
-	s := &Server{db: db, cfg: cfg, assets: assets, log: logger, tickets: map[string]terminalTicket{}, viewers: map[string]*terminalViewer{}, terminalInterval: 2 * time.Second}
+	s := &Server{db: db, cfg: cfg, assets: assets, log: logger, tickets: map[string]terminalTicket{}, viewers: map[string]*terminalViewer{}, terminalInterval: 2 * time.Second, terminalPingInterval: 5 * time.Second, terminalPingTimeout: 5 * time.Second}
 	s.terminalRoot, s.stopTerminals = context.WithCancel(context.Background())
 	manager := sshconnector.New(s.credentials(), cfg.AllowedSSHHosts)
 	s.ssh = manager

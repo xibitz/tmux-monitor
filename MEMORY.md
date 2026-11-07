@@ -22,6 +22,8 @@ serta terminal SSH eksperimental (PTY/ticket/WS/xterm), default disabled dan
 read-only saat buka. Interactive tersedia melalui izin + aktivasi per viewer.
 Toolbar interactive kini memiliki modifier sekali pakai, kolom kombinasi dan
 prefix control-key yang dapat dipilih lokal; keyboard fisik tetap melalui xterm.
+Terminal browser terbaru memakai tmux.v2 dengan heartbeat dan lease15detik;
+offline/putus tidak mengaktifkan input ulang. Hub tetap menerima legacy tmux.v1.
 
 Baseline sebelum irisan T12: `33466f0` (SSH/inventaris); dokumentasi awal handoff:
 `b7b8c1c`. Sebelumnya `1d8c1cf` (UX allowlist), `5c99762` (fondasi), `a879f8c`
@@ -408,6 +410,57 @@ Android/iOS nyata, IME dan screen-reader belum dikualifikasi. Langkah implementa
    web/hub build, static Linux/amd64 tanpa CGO dan upload artifact lulus.
    Commit dokumentasi sesudahnya hanya merekam bukti/checkpoint ini.
 
+## Checkpoint T13 connection liveness (7 November)
+
+Baseline `0bfd504`. **T13 tetap PARTIAL**: koneksi sehat/macet dan restart instance
+hub diuji terisolasi; Wi-Fi/seluler, sleep perangkat dan Serve/Grants nyata belum.
+Langkah implementasi dan aturan untuk kelanjutan:
+1. Kontrak ditulis di docs/api-v1.md sebelum kode. Browser memakai `tmux.v2` +
+   ticket sekali pakai; hub tetap menerima v1 tanpa JSON heartbeat. Header binary
+   tetap version1/sequence terpisah seperti sebelumnya. Web baru perlu hub baru;
+   rebuild/restart backend bersama asset baru, jangan mengubah aturan Origin/ACL.
+2. `internal/httpapi/terminal.go` mengirim native ping tiap5detik untuk v2,
+   timeout5detik, menutup viewer dengan heartbeat_timeout jika pong hilang.
+   Setelah pong, channel bounded1 mengantre heartbeat JSON ke writer utama;
+   viewerId/generation terikat, tanpa PTY content/input/sequence increment.
+   Tidak membuat endpoint baru, credential, migrasi, retry atau resize. Interval
+   server pada server.go internal saja, bukan knob produksi untuk melemahkan cek.
+3. `apps/web/src/terminalLiveness.ts`: lease15detik, heartbeat valid dapat
+   memperpanjang hanya lease yang belum kedaluwarsa. Queued messages sesudah
+   sleep tidak dapat revive. Clock rollback fail-closed. TerminalReplacement
+   mengikat respons mode ke satu attempt15detik dan permanen invalid setelah
+   offline/close; request retry tidak memperpanjang attempt lama.
+4. `TerminalViewer.tsx` memeriksa lease sebelum input/mode, saat pesan diterima,
+   timer1detik dan visibility return. Offline/pagehide membatalkan input dan
+   pending replacement, termasuk gap mode_changed sebelum respons REST tiba.
+   Kegagalan pertama dipertahankan terhadap onclose/onerror/pesan berikutnya;
+   expected mode_changed boleh diganti kegagalan offline/timeout. Double mode
+   request dicegah saat paused. Explicit user attempt baru memakai fence baru.
+   Draft/paste/konfirmasi dibuang; online tidak reconnect/activate otomatis.
+5. `terminal_liveness_test.go` membuktikan v1 kompatibel, v2 sehat walau PTY diam,
+   heartbeat tidak merusak sequence output maupun input atau masuk SSH stdin,
+   readonly tetap menolak input, missing pong detach+audit, ticket terpakai
+   ditolak, fresh reopen readonly dengan viewer baru. Restart New(Server) memakai
+   database/login/host persisten menolak pending ticket lama dan tidak membawa
+   mode/input. Transport terminal di suite ini memakai pipe test; suite SSH/PTY
+   nyata terisolasi tetap dijalankan terpisah, bukan klaim restart OS/host nyata.
+6. `make check test build` final lulus: format/vet/TypeScript, Go -race termasuk
+   SSH+PTY/tmux nyata, 13 kelompok Node tests (8 baru liveness/replacement), web
+   dan hub build. Node clock tests menguji sleep/rollback, deadline sebelum timer
+   callback, stopped lease dan respons aktivasi setelah offline→online.
+7. Browser fixture production-CSP 393x852: idle interactive >15detik tetap sehat,
+   input setelah idle diterima; navigasi keluar/kembali tidak mengaktifkan ulang.
+   Fixture `TMUX_MONITOR_BROWSER_STALLED_HEARTBEAT=1` (test-only) menghentikan
+   heartbeat sementara PTY readonly tetap mengalir tiap detik: browser timeout,
+   stdin readonly, toolbar/draft hilang, manual reopen readonly dengan renderer
+   bersih tanpa replay. Aktivasi/downgrade dan timeout diulang pada build final.
+   Console tanpa warning/error, page393, tiga style memiliki atribut nonce.
+   Screenshot:
+   `/Users/yasho/.codex/visualizations/2026/11/06/01a1afc8-c2a7-70c3-9eba-3da9aa5e9063/terminal-connection-timeout-mobile.jpg`.
+   Ini simulasi koneksi/echo UI, bukan uji fisik offline/sleep/bfcache atau tailnet.
+8. Commit/push SSH dan CI source dicatat sesudah checkpoint. .env/data/host/key
+   dan proses pengguna tidak diubah/restart. Fixture/tab/viewport sudah dibersihkan.
+
 ## Titik lanjut tepat
 
 1. Baca hasil CI/commit checkpoint interactive terbaru. Cek git status dan
@@ -418,7 +471,7 @@ Android/iOS nyata, IME dan screen-reader belum dikualifikasi. Langkah implementa
 3. T31: uji keyboard fisik/IME Android+iOS, clipboard sensitif dan aksesibilitas
    screen-reader/fokus pada perangkat nyata. Modifier/prefix dan matriks byte
    sudah tersedia; bukan klaim T31 DONE. Input membagi session dengan desktop.
-4. T13: uji real network switch/sleep/hub restart dan error taxonomy final;
+4. T13: uji real network switch/sleep/restart proses hub dan error taxonomy final;
    mode activation/reopen harus tetap readonly dan tanpa replay. Input yang
    sudah in-flight pada waktu revoke/disconnect mungkin sudah diproses remote;
    jangan menjanjikan undo/zero input secara retroaktif.

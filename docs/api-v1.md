@@ -93,7 +93,8 @@ the login token, user, host, socket, credential reference, epoch and target.
 Maximum 64 pending tickets globally / 8 per login. No token in URLs or logs.
 
 Browser upgrades `/ws/v1/terminal` with cookie, exact Origin and subprotocols
-`["tmux.v1","ticket.<ticket>"]`; server selects only `tmux.v1`. Upgrade consumes
+`["tmux.v1","ticket.<ticket>"]` for legacy clients; the current browser uses
+`tmux.v2` as described below. The server selects the version, never the ticket. Upgrade consumes
 the ticket, rechecks authorization and reserves a viewer (8 global / 4 per user /
 4 per host). Unsupported/missing protocols are rejected. No REST CSRF header is
 needed on upgrade: the one-use ticket was issued by a CSRF-protected POST.
@@ -130,6 +131,33 @@ Audit open/close/denial records include host, epoch/native target and reason.
 The browser disables stdin in read-only, OSC52 clipboard, window manipulation and automatic
 link activation; xterm write backlog is capped. Manual reopening gets a new
 ticket, viewer ID and empty renderer, starting in read-only/generation 1.
+
+### Connection liveness (T13, partial)
+
+The current browser requests subprotocol `tmux.v2` plus `ticket.<ticket>`.
+The server also accepts legacy `tmux.v1`, preserving its existing message set;
+v1 receives no heartbeat JSON. Authentication, tickets, input/output binary header
+version 1, limits and mode transitions are unchanged. Deploy the rebuilt hub with
+the current web assets; older hubs do not support v2.
+
+After `terminal.opened`, v2 sends WebSocket ping every 5 seconds, awaiting pong
+for at most 5 seconds. A missing pong detaches only this viewer with
+`heartbeat_timeout`. After a successful ping/pong the writer sends
+`{type:"terminal.heartbeat",viewerId,generation:1}`. It carries no terminal data,
+does not advance either binary sequence, and never writes to SSH stdin. Idle
+terminals are healthy; output activity is not required for liveness.
+
+The browser allows 15 seconds for WebSocket connection/setup and subsequently
+15 seconds without a valid opened/heartbeat. Deadlines are checked before input,
+on incoming messages, every second and on visibility return. Expired connections
+cannot be revived by queued messages after sleep. Offline or pagehide closes the
+viewer immediately; online/pageshow never reactivate input or replay it. The first
+terminal reason is retained; later close/error/messages cannot overwrite/revive
+it. Pending activation/paste/modifiers are discarded. Buka ulang is an explicit
+action issuing a new read-only ticket, fresh renderer and sequence namespace.
+In-flight input may already have reached the host; no undo is promised. Timers
+can be suspended by the OS, so detection occurs when execution resumes; real
+network-switch/device qualification remains open.
 
 ### Explicit interactive activation
 

@@ -72,6 +72,11 @@ func TestBrowserFixture(t *testing.T) {
 	terminalMode := os.Getenv("TMUX_MONITOR_BROWSER_TERMINAL") == "1"
 	if terminalMode {
 		h.server.cfg.TerminalEnabled = true
+		// Test browser deadline enforcement even while PTY output keeps flowing.
+		// No production switch disables heartbeats.
+		if os.Getenv("TMUX_MONITOR_BROWSER_STALLED_HEARTBEAT") == "1" {
+			h.server.terminalPingInterval = time.Hour
+		}
 		h.server.cfg.Development = false // production CSP, Secure cookie on localhost
 		h.server.cfg.AllowedSSHHosts["test.example.ts.net"] = true
 		h.server.terminal = browserInteractiveOpener{openerFunc(func(ctx context.Context, _ sshconnector.Host, _ sshconnector.Record, _, _ string) (sshconnector.Terminal, error) {

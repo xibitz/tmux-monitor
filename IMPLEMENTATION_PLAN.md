@@ -20,7 +20,7 @@ pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus
 | T10 | DONE | Key store/CLI configure-revoke, pin dan algoritme host key, tailnet address guard, bounded probe/API/UI; uji lokal dan CI Linux lulus. Uji tailnet nyata tetap T01/T03. |
 | T11 | DONE | Parser/epoch/revision, SSH snapshot, cache stale/revoke dan UI; uji tmux nyata terisolasi di macOS serta CI Linux lulus (empty/rename/split/kill/restart). |
 | T12 | PARTIAL | Terminal eksperimental: default read-only, aktivasi interactive dengan izin/tiket baru, input bersequence/rate limit, PTY raw, Unicode/control dan revoke/no-replay tests. Gate perangkat/akses nyata masih terbuka. |
-| T13 | PARTIAL | Buka ulang manual/new ticket/reset read-only, no replay, alasan penutupan/revoke tersedia dan browser fixture lulus. Network switch/hub restart/perangkat nyata tetap terbuka. |
+| T13 | PARTIAL | Heartbeat v2 + ping/pong, deadline browser/input, offline/pagehide, mode-response fence dan reopen read-only tanpa replay tersedia. Uji idle/timeout/sequence/restart hub terisolasi dan browser fixture lulus. Network switch/sleep/perangkat nyata tetap terbuka. |
 | T20 | TODO | Mutasi session dengan epoch/revision, idempotency, konfirmasi/audit. |
 | T21 | TODO | Mutasi window/pane, snapshot pane dan suite dua transport. |
 | T22 | TODO | Enrollment/revoke Agent, credential, handshake/generation dan RPC. |
@@ -83,6 +83,13 @@ Checkpoint toolbar T31 `db29894`: [CI Ubuntu sukses](https://github.com/xibitz/t
 make check/test/build lokal dan browser fixture production-CSP 393x852 lulus.
 Ctrl/Alt/Shift sekali pakai, kolom kombinasi dan prefix satu control byte tersedia;
 draft/reset mode diuji. T31 tetap PARTIAL sampai gate perangkat/aksesibilitas nyata lulus.
+
+Irisan T13 berikutnya menambah heartbeat versi protokol2 (legacy v1 tetap),
+lease browser15detik, pembatalan input/draft dan respons aktivasi terlambat.
+make check/test/build lokal, 13 kelompok uji frontend serta fixture browser
+healthy-idle/missing-heartbeat/reopen lulus. Restart instance hub dengan database
+persisten diuji terisolasi; ini bukan bukti pindah jaringan/HP nyata. Lihat MEMORY.md
+untuk checkpoint commit/CI.
 
 | Tahap | Prioritas | Hasil yang dapat didemokan | Gate keluar |
 |---|---:|---|---|

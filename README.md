@@ -33,6 +33,15 @@ klien tmux lain. Ia tidak menyediakan pane independen. Input keyboard memerlukan
 Ukuran mengikuti window remote; layar ponsel dapat digeser. Tutup/Kembali hanya
 detach. Bila putus, **Buka ulang** membuat viewer baru tanpa replay input.
 
+Viewer sekarang memeriksa koneksi dengan heartbeat. Input dihentikan jika
+koneksi tidak terkonfirmasi selama 15 detik, perangkat offline, atau halaman
+ditinggalkan. Saat kembali online, klik **Buka ulang**; mode selalu kembali
+read-only dan perlu aktivasi lagi untuk mengetik. Terminal yang diam tanpa output
+tetap sehat selama heartbeat berjalan. Jika perangkat tidur, pemeriksaan
+dilanjutkan saat browser aktif lagi; ketikan lama tidak dikirim ulang.
+Web terbaru memakai protokol `tmux.v2`: bangun ulang/restart hub bersama asset web
+baru. Hub baru tetap menerima browser lama (`tmux.v1`) tanpa heartbeat aplikasi.
+
 Prasyarat ukuran: tmux **3.7+**, default global `window-size manual` dan semua
 window pada session yang dilihat juga efektif `manual`. Tanpa itu, viewer menolak
 attach dengan pesan kebijakan ukuran. Aplikasi **tidak mengubah opsi tmux host**.

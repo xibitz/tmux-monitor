@@ -5,6 +5,7 @@ import { api } from "./api";
 import { TerminalToolbar } from "./TerminalToolbar";
 import { encodeTerminalKey } from "./terminalKeys";
 import type { Modifiers, TerminalKey } from "./terminalKeys";
+import { TerminalLiveness, TerminalReplacement } from "./terminalLiveness";
 import "@xterm/xterm/css/xterm.css";
 
 const reasons: Record<string, string> = {
@@ -27,6 +28,14 @@ const reasons: Record<string, string> = {
   ssh_closed:
     "Koneksi terminal SSH berakhir. Session tmux mungkin tetap berjalan.",
   disconnected: "Koneksi ke hub terputus. Session tmux tetap dikelola host.",
+  heartbeat_timeout:
+    "Koneksi terminal tidak lagi terkonfirmasi. Input dihentikan. Buka ulang dalam read-only; sebagian input mungkin sudah diproses dan tidak akan dikirim ulang.",
+  connection_timeout:
+    "Hub belum menyiapkan viewer dalam batas waktu. Periksa koneksi lalu buka ulang dalam read-only.",
+  network_offline:
+    "Perangkat sedang offline. Input dihentikan. Setelah terhubung, buka ulang dalam read-only.",
+  page_suspended:
+    "Halaman ditinggalkan atau ditangguhkan. Buka ulang dalam read-only untuk melanjutkan.",
   timeout: "Batas waktu koneksi SSH terlampaui.",
   host_key_mismatch:
     "Host key tidak cocok dengan key terverifikasi. Koneksi dihentikan.",
@@ -90,10 +99,13 @@ type ViewerControl = {
   alive: boolean;
   paused: boolean;
   interactive: boolean;
+  replacement: TerminalReplacement;
   scope: string;
   cursorMode: () => boolean;
   focus: () => void;
-  send: (data: Uint8Array) => void;
+  current: () => boolean;
+  abandon: (reason: string) => void;
+  send: (data: Uint8Array) => boolean;
   paste: (text: string) => void;
 };
 
@@ -136,35 +148,52 @@ export function TerminalViewer({
   const controlRef = useRef<ViewerControl | undefined>(undefined);
   async function changeMode(mode: "interactive" | "read_only") {
     const control = controlRef.current;
-    if (!control?.alive) return;
+    if (!control?.alive || control.paused || !control.current()) return;
     control.paused = true;
     setConfirmInput(false);
     setPastePending(undefined);
     setSwitching(true);
     setModeError("");
+    const replacement = new TerminalReplacement();
+    control.replacement = replacement;
+    replacement.begin();
     try {
       const result = await api<{ ticket: string }>(
         `/terminal/viewers/${control.viewer}/mode-tickets`,
         "POST",
         { mode },
       );
-      if (controlRef.current === control)
+      if (!replacement.current()) {
+        control.abandon("heartbeat_timeout");
+        return;
+      }
+      if (controlRef.current === control && control.replacement === replacement)
         setConnection((current) => ({
           attempt: current.attempt + 1,
           ticket: result.ticket,
           scope: control.scope,
         }));
     } catch (error) {
-      if (controlRef.current === control) {
+      if (
+        controlRef.current === control &&
+        control.replacement === replacement &&
+        replacement.current()
+      ) {
+        replacement.invalidate();
         setModeError((error as Error).message);
         control.paused = false;
         setSwitching(false);
+      } else {
+        control.abandon("heartbeat_timeout");
       }
     }
   }
 
   useEffect(() => {
     let active = true;
+    let ended = false;
+    let endedReason = "";
+    let liveness: TerminalLiveness | undefined;
     let socket: WebSocket | undefined;
     let terminal: Terminal | undefined;
     let viewer = "";
@@ -181,12 +210,20 @@ export function TerminalViewer({
     let pasteHandler: ((event: ClipboardEvent) => void) | undefined;
     setStatus("Memverifikasi host dan session…");
     function finish(reason: string) {
-      if (!active) return;
+      if (!active || ended) return;
+      ended = true;
+      endedReason = reason;
+      liveness?.stop();
       setConnected(false);
       setInteractive(false);
       setCanWrite(false);
+      setSwitching(false);
+      setConfirmInput(false);
       setPastePending(undefined);
-      if (control) control.alive = false;
+      if (control) {
+        control.alive = false;
+        if (reason !== "mode_changed") control.replacement.invalidate();
+      }
       if (terminal) terminal.options.disableStdin = true;
       setStatus(
         reasons[reason] ??
@@ -194,8 +231,42 @@ export function TerminalViewer({
       );
       socket?.close();
     }
+    function checkConnection() {
+      if (!active || ended) return false;
+      if (liveness && !liveness.current()) {
+        finish(terminal ? "heartbeat_timeout" : "connection_timeout");
+        return false;
+      }
+      return true;
+    }
+    function abandon(reason: string) {
+      if (!active) return;
+      // An expected mode_changed close can precede its REST response. Offline
+      // during that gap must discard the pending replacement, even after online.
+      if (control) {
+        if (ended && endedReason === "mode_changed") {
+          endedReason = reason;
+          setStatus(reasons[reason]);
+        }
+        control.replacement.invalidate();
+      }
+      finish(reason);
+    }
+    const onOffline = () => abandon("network_offline");
+    const onPageHide = () => abandon("page_suspended");
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") checkConnection();
+    };
+    window.addEventListener("offline", onOffline);
+    window.addEventListener("pagehide", onPageHide);
+    document.addEventListener("visibilitychange", onVisibility);
+    const watchdog = window.setInterval(checkConnection, 1000);
     void (async () => {
       try {
+        if (!navigator.onLine) {
+          finish("network_offline");
+          return;
+        }
         const { ticket } =
           connection.ticket && connection.scope === scope
             ? { ticket: connection.ticket }
@@ -204,13 +275,14 @@ export function TerminalViewer({
                 sessionId,
                 epoch,
               });
-        if (!active) return;
+        if (!active || ended) return;
         const url = new URL("/ws/v1/terminal", window.location.href);
         url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-        socket = new WebSocket(url, ["tmux.v1", `ticket.${ticket}`]);
+        liveness = new TerminalLiveness();
+        socket = new WebSocket(url, ["tmux.v2", `ticket.${ticket}`]);
         socket.binaryType = "arraybuffer";
         socket.onmessage = (event: MessageEvent<string | ArrayBuffer>) => {
-          if (!active) return;
+          if (!checkConnection()) return;
           if (typeof event.data === "string") {
             try {
               const message = JSON.parse(event.data);
@@ -230,6 +302,7 @@ export function TerminalViewer({
                 message.rows <= 205
               ) {
                 viewer = message.viewerId;
+                liveness?.heartbeat();
                 terminal = new Terminal({
                   cols: message.cols,
                   rows: message.rows,
@@ -252,10 +325,13 @@ export function TerminalViewer({
                   alive: true,
                   paused: false,
                   interactive: writable,
+                  replacement: new TerminalReplacement(),
                   scope,
                   cursorMode: () =>
                     terminal?.modes.applicationCursorKeysMode ?? false,
                   focus: () => terminal?.focus(),
+                  current: checkConnection,
+                  abandon,
                   send: (bytes) => {
                     if (
                       !active ||
@@ -264,13 +340,14 @@ export function TerminalViewer({
                       !writable ||
                       socket?.readyState !== WebSocket.OPEN
                     )
-                      return;
+                      return false;
+                    if (!checkConnection()) return false;
                     if (
                       bytes.length > 32768 ||
                       socket.bufferedAmount + bytes.length > 65536
                     ) {
                       finish("input_limit");
-                      return;
+                      return false;
                     }
                     for (
                       let offset = 0;
@@ -295,9 +372,10 @@ export function TerminalViewer({
                         socket.send(frame);
                       } catch {
                         finish("input_uncertain");
-                        return;
+                        return false;
                       }
                     }
+                    return true;
                   },
                   paste: (text) => {
                     if (
@@ -342,6 +420,13 @@ export function TerminalViewer({
                 setStatus(`Terhubung · ${message.cols} × ${message.rows}`);
                 setConnected(true);
               } else if (
+                message.type === "terminal.heartbeat" &&
+                terminal &&
+                message.viewerId === viewer &&
+                message.generation === 1
+              ) {
+                liveness?.heartbeat();
+              } else if (
                 message.type === "terminal.closed" ||
                 message.type === "resync_required" ||
                 message.type === "error"
@@ -384,30 +469,27 @@ export function TerminalViewer({
           });
         };
         socket.onerror = () => finish("disconnected");
-        socket.onclose = () => {
-          if (active) {
-            setConnected(false);
-            setInteractive(false);
-            setCanWrite(false);
-            setPastePending(undefined);
-            if (control) control.alive = false;
-            if (terminal) terminal.options.disableStdin = true;
-            setStatus((current) =>
-              current.startsWith("Terhubung") ||
-              current.startsWith("Memverifikasi")
-                ? reasons.disconnected
-                : current,
-            );
-          }
-        };
+        socket.onclose = () => finish("disconnected");
       } catch (error) {
-        if (active) setStatus((error as Error).message);
+        if (active && !ended) {
+          finish("connection_failed");
+          setStatus((error as Error).message);
+        }
       }
     })();
     return () => {
       active = false;
+      ended = true;
+      liveness?.stop();
+      window.clearInterval(watchdog);
+      window.removeEventListener("offline", onOffline);
+      window.removeEventListener("pagehide", onPageHide);
+      document.removeEventListener("visibilitychange", onVisibility);
       if (controlRef.current === control) controlRef.current = undefined;
-      if (control) control.alive = false;
+      if (control) {
+        control.alive = false;
+        control.replacement.invalidate();
+      }
       if (pasteHandler)
         element.current?.removeEventListener("paste", pasteHandler, true);
       if (socket?.readyState === WebSocket.OPEN)
@@ -529,7 +611,7 @@ export function TerminalViewer({
               modifiers,
               control.cursorMode(),
             );
-            control.send(new TextEncoder().encode(data));
+            if (!control.send(new TextEncoder().encode(data))) return false;
             control.focus();
             return true;
           }}

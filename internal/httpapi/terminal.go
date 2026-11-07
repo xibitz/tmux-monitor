@@ -97,7 +97,7 @@ func (s *Server) terminalUpgrade(w http.ResponseWriter, r *http.Request) {
 	if len(protocols) == 2 {
 		for _, p := range protocols {
 			p = strings.TrimSpace(p)
-			if p == "tmux.v1" {
+			if p == "tmux.v1" || p == "tmux.v2" {
 				version = true
 			} else if strings.HasPrefix(p, "ticket.") {
 				raw = strings.TrimPrefix(p, "ticket.")
@@ -158,7 +158,7 @@ func (s *Server) terminalUpgrade(w http.ResponseWriter, r *http.Request) {
 	}()
 	// Origin was compared byte-for-byte by authorize. Accept also performs its
 	// own host-based check; do not use InsecureSkipVerify.
-	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{Subprotocols: []string{"tmux.v1"}, OriginPatterns: []string{strings.TrimPrefix(strings.TrimPrefix(s.cfg.Origin, "https://"), "http://")}, CompressionMode: websocket.CompressionDisabled})
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{Subprotocols: []string{"tmux.v2", "tmux.v1"}, OriginPatterns: []string{strings.TrimPrefix(strings.TrimPrefix(s.cfg.Origin, "https://"), "http://")}, CompressionMode: websocket.CompressionDisabled})
 	if err != nil {
 		return
 	}
@@ -328,6 +328,34 @@ func (s *Server) serveTerminal(r *http.Request, conn *websocket.Conn, t terminal
 		}
 	}()
 	id, _ := hex.DecodeString(viewer)
+	heartbeats := make(chan struct{}, 1)
+	if conn.Subprotocol() == "tmux.v2" {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			tick := time.NewTicker(s.terminalPingInterval)
+			defer tick.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-tick.C:
+					pingCtx, done := context.WithTimeout(ctx, s.terminalPingTimeout)
+					err := conn.Ping(pingCtx)
+					done()
+					if err != nil {
+						cancel(errors.New("heartbeat_timeout"))
+						return
+					}
+					select {
+					case heartbeats <- struct{}{}:
+					case <-ctx.Done():
+						return
+					}
+				}
+			}
+		}()
+	}
 	var sequence, inputSequence uint64
 	budget := float64(32 * 1024)
 	lastInput := time.Now()
@@ -335,6 +363,11 @@ func (s *Server) serveTerminal(r *http.Request, conn *websocket.Conn, t terminal
 		select {
 		case <-ctx.Done():
 			return
+		case <-heartbeats:
+			if err := writeJSON(map[string]any{"type": "terminal.heartbeat", "viewerId": viewer, "generation": 1}); err != nil {
+				cancel(errors.New("disconnected"))
+				return
+			}
 		case frame := <-incoming:
 			if len(frame) <= 30 || frame[0] != 1 || frame[1] != 1 || binary.BigEndian.Uint32(frame[2:6]) != 1 || binary.BigEndian.Uint64(frame[6:14]) != inputSequence+1 || !bytes.Equal(frame[14:30], id) {
 				cancel(errors.New("input_invalid"))
