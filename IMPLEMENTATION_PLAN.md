@@ -94,6 +94,8 @@ untuk checkpoint commit/CI.
 
 Irisan T20 rename: opt-in `TMUX_MONITOR_MUTATIONS_ENABLED`, SSH/tmux3.8,
 schema004, fresh renameRevision + server guard dan idempotensi persisten.
+Source `99c0791`: [CI Ubuntu sukses](https://github.com/xibitz/tmux-monitor/actions/runs/42357657388),
+termasuk SSH/tmux rename, migrasi4, API/idempotensi dan build statis Linux.
 
 - [x] Kontrak, ADR0003, migrasi naik/turun yang mempertahankan audit lama.
 - [x] Guard identitas/nama, konflik nama duplikat, restart/ID reuse, validasi quoting.

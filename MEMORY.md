@@ -522,7 +522,13 @@ Langkah implementasi:
    `/Users/yasho/.codex/visualizations/2026/11/06/01a1afc8-c2a7-70c3-9eba-3da9aa5e9063/session-rename-mobile.jpg`.
    Fixture/tab/viewport sudah dibersihkan. .env/runtime/data/host pengguna tidak
    diubah atau direstart. Bukti perangkat/host tailnet nyata tetap belum tersedia.
-8. Commit/push SSH dan bukti CI dicatat setelah checkpoint ini.
+8. Source **`99c0791`** sudah dipush melalui SSH. **CI Ubuntu sukses**:
+   https://github.com/xibitz/tmux-monitor/actions/runs/42357657388
+   make check/test/build, SSH+PTY dan rename tmux3.8 nyata terisolasi, migrasi4,
+   idempotensi/ACL/restart/audit/quota, 13 Node groups, sizing spike, static
+   Linux/amd64 tanpa CGO dan artifact semuanya lulus. Commit dokumen sesudahnya
+   hanya merekam bukti ini. T20 tetap PARTIAL; lanjut create/kill dengan kontrak
+   dan guard khususnya, bukan menganggap rename sudah memenuhi semua manajemen.
 
 ## Titik lanjut tepat
 
