@@ -33,6 +33,7 @@ export type Inventory = {
   observedAt: string;
   stale: boolean;
   epoch: string;
+  createRevision: string;
   capabilities: {
     inventory: boolean;
     ptyAttach: boolean;

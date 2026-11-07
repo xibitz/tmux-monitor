@@ -2,6 +2,7 @@ import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { SessionRename } from "./SessionRename";
+import { SessionLifecycle } from "./SessionLifecycle";
 import {
   Activity,
   ArrowLeft,
@@ -1112,14 +1113,23 @@ function HostDetails({
   const [inventory, setInventory] = useState<Inventory>();
   const [terminalEnabled, setTerminalEnabled] = useState(false);
   const [canRename, setCanRename] = useState(false);
+  const [canCreate, setCanCreate] = useState(false);
+  const [canKill, setCanKill] = useState(false);
   useEffect(() => {
     let active = true;
+    setCanRename(false);
+    setCanCreate(false);
+    setCanKill(false);
     if (host.transport === "ssh")
-      void api<{ canRename: boolean }>(
+      void api<{ canRename: boolean; canCreate?: boolean; canKill?: boolean }>(
         `/hosts/${encodeURIComponent(host.id)}/session-options`,
       )
         .then((options) => {
-          if (active) setCanRename(options.canRename);
+          if (active) {
+            setCanRename(options.canRename);
+            setCanCreate(options.canCreate === true);
+            setCanKill(options.canKill === true);
+          }
         })
         .catch(() => {});
     return () => {
@@ -1378,9 +1388,38 @@ function HostDetails({
                   inventaris terakhir; data ini sudah stale.
                 </div>
               )}
-              {canRename && inventory.capabilities.tmuxVersion !== "3.8" && (
+              {(canRename || canCreate || canKill) &&
+                inventory.capabilities.tmuxVersion !== "3.8" && (
+                  <p className="panel-description">
+                    Pengelolaan session memerlukan tmux 3.8.
+                  </p>
+                )}
+              {canCreate && (
+                <SessionLifecycle
+                  key={inventory.observedAt + ":create"}
+                  mode="create"
+                  hostId={host.id}
+                  epoch={inventory.epoch}
+                  revision={inventory.createRevision}
+                  disabled={
+                    busy ||
+                    inventory.stale ||
+                    !inventory.capabilities.serverRunning ||
+                    !inventory.epoch ||
+                    !inventory.createRevision ||
+                    inventory.capabilities.tmuxVersion !== "3.8"
+                  }
+                  onRefresh={() => {
+                    setInventory(undefined);
+                    void inspect();
+                  }}
+                />
+              )}
+              {canCreate && !inventory.capabilities.serverRunning && (
                 <p className="panel-description">
-                  Ubah nama session memerlukan tmux 3.8 yang telah diuji.
+                  Buat session awal melalui administrasi host, lalu periksa
+                  inventaris kembali. Aplikasi tidak menyalakan server tmux baru
+                  secara otomatis.
                 </p>
               )}
               {inventory.sessions.length === 0 ? (
@@ -1416,6 +1455,25 @@ function HostDetails({
                           disabled={
                             inventory.stale ||
                             busy ||
+                            inventory.capabilities.tmuxVersion !== "3.8"
+                          }
+                          onRefresh={() => {
+                            setInventory(undefined);
+                            void inspect();
+                          }}
+                        />
+                      )}
+                      {canKill && session.revision && (
+                        <SessionLifecycle
+                          key={inventory.observedAt + session.id + ":kill"}
+                          mode="kill"
+                          hostId={host.id}
+                          epoch={inventory.epoch}
+                          revision={session.revision}
+                          session={session}
+                          disabled={
+                            busy ||
+                            inventory.stale ||
                             inventory.capabilities.tmuxVersion !== "3.8"
                           }
                           onRefresh={() => {

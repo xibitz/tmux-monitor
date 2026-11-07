@@ -27,16 +27,17 @@ type Capabilities struct {
 	ServerRunning   bool   `json:"serverRunning"`
 }
 type Inventory struct {
-	HostID       string       `json:"hostId"`
-	SocketID     string       `json:"socketId"`
-	Transport    string       `json:"transport"`
-	State        string       `json:"state"`
-	StatusReason string       `json:"statusReason"`
-	ObservedAt   string       `json:"observedAt"`
-	Stale        bool         `json:"stale"`
-	Epoch        string       `json:"epoch"`
-	Capabilities Capabilities `json:"capabilities"`
-	Sessions     []Session    `json:"sessions"`
+	HostID         string       `json:"hostId"`
+	SocketID       string       `json:"socketId"`
+	Transport      string       `json:"transport"`
+	State          string       `json:"state"`
+	StatusReason   string       `json:"statusReason"`
+	ObservedAt     string       `json:"observedAt"`
+	Stale          bool         `json:"stale"`
+	Epoch          string       `json:"epoch"`
+	CreateRevision string       `json:"createRevision"`
+	Capabilities   Capabilities `json:"capabilities"`
+	Sessions       []Session    `json:"sessions"`
 }
 type Session struct {
 	ID             string   `json:"id"`
@@ -226,6 +227,7 @@ func Parse(host, socket, version string, output []byte) (Inventory, error) {
 		s.RenameRevision = digest("rn_", inv.Epoch, s.ID, s.Name, strconv.FormatInt(s.CreatedAt, 10))
 		s.Revision = digest("r_", inv.Epoch, canonical(s))
 	}
+	inv.CreateRevision = createRevision(inv)
 	return inv, nil
 }
 

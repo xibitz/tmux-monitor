@@ -6,6 +6,11 @@ Dokumen ini menyimpan keadaan pekerjaan; spesifikasi produk tetap di
 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md), kontrak API aktual di
 [docs/api-v1.md](docs/api-v1.md).
 
+**Instruksi pengguna terbaru: lanjut development tanpa testing.** Pengujian
+otomatis/browser/CI ditunda sampai pengguna memberi arahan berbeda. Checkpoint
+create/kill di bawah hanya source + format/review; build/compile juga tidak
+dijalankan pada turn ini. Jangan memakai CI rename lama sebagai bukti kode baru.
+
 ## Tujuan dan keadaan saat ini
 
 Mobile Tmux Manager adalah aplikasi Go + React untuk mengamati/mengelola tmux
@@ -14,7 +19,7 @@ Pengguna meminta development diteruskan dan status ditulis agar agent baru bisa
 melanjutkan tanpa mengandalkan riwayat chat. **Memory ini wajib diperbarui setelah
 checkpoint, sebelum berhenti, dan sebelum context/token habis.**
 
-Yang sudah tersedia: hub localhost-only, SQLite WAL/migrasi 001–004, bootstrap
+Yang sudah tersedia: hub localhost-only, SQLite WAL/migrasi source001–005, bootstrap
 admin, Argon2id/cookie sesi, ACL/CSRF/Origin, profil host, audit, UI responsif,
 allowlist SSH, Makefile/CI, **key store + CLI SSH configure/revoke, public host
 key pinning, probe dan inventaris tmux dengan epoch/revision serta cache stale**,
@@ -25,7 +30,9 @@ prefix control-key yang dapat dipilih lokal; keyboard fisik tetap melalui xterm.
 Terminal browser terbaru memakai tmux.v2 dengan heartbeat dan lease15detik;
 offline/putus tidak mengaktifkan input ulang. Hub tetap menerima legacy tmux.v1.
 Rename session SSH/tmux3.8 eksperimental tersedia dengan flag mutasi terpisah,
-konfirmasi, guard identitas dan ledger idempotensi persisten. Create/kill belum.
+konfirmasi, guard identitas dan ledger idempotensi persisten. Source create/kill
+telah ditambahkan di belakang flag baru default-off; **belum diuji atau dikompilasi**.
+Migrasi005 juga belum diuji; database/runtime pengguna belum diupgrade.
 
 Baseline sebelum irisan T12: `33466f0` (SSH/inventaris); dokumentasi awal handoff:
 `b7b8c1c`. Sebelumnya `1d8c1cf` (UX allowlist), `5c99762` (fondasi), `a879f8c`
@@ -530,6 +537,66 @@ Langkah implementasi:
    hanya merekam bukti ini. T20 tetap PARTIAL; lanjut create/kill dengan kontrak
    dan guard khususnya, bukan menganggap rename sudah memenuhi semua manajemen.
 
+## Checkpoint T20 create/kill — BELUM DIUJI (7 November)
+
+Baseline `c98b67f`. User meminta development tanpa testing. T20 tetap PARTIAL,
+tidak ada klaim gate selesai. Tidak menjalankan go test/go build/go vet/tsc,
+make check/test/build, npm test/check/build, browser fixture atau CI. Hanya membaca
+source/dokumentasi, meninjau diff, gofmt dan Prettier write. Tidak menulis test
+baru pada checkpoint ini. Commit memakai `[skip ci]`; workflow CI tidak diubah.
+
+Langkah implementasi:
+1. Kontrak ditulis sebelum kode di docs/api-v1.md; keputusan di
+   docs/adr/0004-session-lifecycle.md. Flag baru
+   `TMUX_MONITOR_SESSION_LIFECYCLE_ENABLED=false` harus aktif bersama MUTATIONS.
+   Rename tetap memakai jalur dispatch lama. Config/.env.example diperbarui;
+   .env pengguna tidak dibaca/diubah dan tidak ada backend direstart.
+2. `internal/tmux/session_lifecycle.go` + inventory.go: createRevision cr_ hash
+   epoch dan sorted(sessionid/name/created) tanpa window/process. Create hanya
+   pada server tmux3.8 yang sudah aktif, native global -N mencegah bootstrap.
+   Guard S: memeriksa jumlah dan identitas/nama setiap session; detached new-session
+   default shell dengan ukuran awal120x40, tanpa command/env/cwd dari request.
+3. Kill memakai full session.revision r_, bukan renameRevision rn_. Wajib
+   confirmed dan confirmation tepat native ID ($N). Guard server+session dan
+   W:/P: membership/name/index/active/dimensi/current-command lalu kill-session
+   targetID saja, tidak ada kill-server. Linked windows mengikuti aturan tmux.
+   Guard conjunction balanced untuk menghindari nesting dalam. Batas64 item per
+   koleksi/serialized command64KiB; konstruksi guard juga dibatasi. Loop/nama
+   khusus/empty-server/last-session behavior semuanya BELUM dieksekusi.
+4. `internal/connector/ssh/session_lifecycle.go`: gate observation/mutation yang
+   sama, connect pin/address/user, fresh snapshot/empty fallback, version3.8,
+   callback revalidasi login/ACL/key tepat sebelum satu dispatch. Marker create
+   mengembalikan native ID; lost/ambiguous reply operation_uncertain tanpa retry.
+   Peninjauan sumber tmux3.8 man/arguments/format dilakukan, bukan bukti uji.
+5. `internal/httpapi/session_lifecycle.go`: POST sessions butuh read+write, DELETE
+   native session butuh read+kill, keduanya Origin/CSRF dan Idempotency-Key32hex.
+   New lifecycle interface/Server wiring; GET session-options menambah izin
+   canCreate/canKill/lifecycleEnabled. Executor baru terpisah dari rename: reserve
+   pending+audit intent+invalidatecache, action-bound request hash, callback fresh
+   credentials, completion+audit atomik, quota10000/no prune, pending tidak replay.
+6. Migrasi005 result_target menambah metadata native ID pada ledger agar hasil
+   create bisa direplay tanpa resolve nama atau mengeksekusi lagi. LatestVersion5.
+   Replay status200/201 memerlukan result target valid; target hilang/tidakvalid
+   tetap uncertain. Downgrade menghilangkan metadata hasil, bukan pemulihan retry.
+   Audit tidak menyimpan nama/raw key/body. Schema4/rename reservation dipertahankan.
+7. `SessionLifecycle.tsx` + main.tsx/api.ts: Buat session dan Hentikan session,
+   konfirmasi dampak, typed nativeID untuk kill, no duplicate submit/no retry,
+   clear draft dan wajib refresh setelah failure. Options flag off menyembunyikan
+   UI; stale/tmux selain3.8/no server memblok create. DTO inventory createRevision
+   ditambahkan. Tidak ada LocalStorage, output/input recording atau screenshot
+   baru karena browser verification memang tidak dilakukan.
+8. README, kontrak API, ADR0004 dan plan menjelaskan bahwa source create/kill dan
+   migrasi005 belum diuji. CI sukses99c0791 hanya bukti baseline rename sebelumnya.
+   Tidak ada operasi ke host/tmux/SSH pengguna, test fixture, perubahan .data,
+   keys, Tailscale atau runtime. Commit/push SSH dengan [skip ci] dicatat berikutnya.
+
+Pekerjaan yang belum diverifikasi (jangan jalankan selama instruksi no-testing
+masih berlaku): compile/TypeScript; regression rename/terminal; migrasi4/5 dan
+create replay nativeID; concurrent/cross-action/pending/restart/auditfailure/revoke;
+create empty existing server/no bootstrap/duplicate/session-set race; kill tree
+race/typedID/lastsession/linkedwindow; nested format literals/limits; mobile UI,
+focus/close/stale snapshot dan no-retry. Tabel acceptance pending ada di plan.
+
 ## Titik lanjut tepat
 
 1. Baca hasil CI/commit checkpoint interactive terbaru. Cek git status dan
@@ -544,12 +611,12 @@ Langkah implementasi:
    mode activation/reopen harus tetap readonly dan tanpa replay. Input yang
    sudah in-flight pada waktu revoke/disconnect mungkin sudah diproses remote;
    jangan menjanjikan undo/zero input secara retroaktif.
-5. T20: rename sudah tersedia; lanjutkan create session dan kill session dengan
-   kontrak epoch/revision/idempotensi yang sesuai. Kill perlu typed confirmation,
-   fresh target guard dan audit intent; create perlu precondition socket/epoch
-   tanpa menyalakan server baru secara tidak sengaja. Jangan menyamakan guard
-   renameRevision dengan layout revision. Tidak ada raw-shell/kill-server API.
-   Ledger idempotensi retained harus tetap bertahan restart. T21+ sesudah T20.
+5. T20: source create/kill sekarang tersedia tetapi belum diuji. Tetap ikuti
+   instruksi no-testing pengguna. Kualifikasi checklist di atas hanya bila
+   pengguna mengizinkan testing kembali; jangan menandai selesai dari review
+   source. Bila diminta melanjutkan development saja, lanjut T21 kontrak window/
+   pane memakai fondasi ini tanpa menjalankan operasi nyata. Tidak ada raw-shell/
+   kill-server API; ledger pending harus tetap retained setelah restart.
 6. Ikuti aturan implementasi di atas; perbarui memory/tasklist/CI dan push SSH.
 
 Catatan onboarding: target-host.pub harus disediakan operator; bukan dibuat oleh
@@ -563,8 +630,9 @@ hostname atau fingerprint pribadi pengguna yang dicatat dalam repositori.
 Backend pengguna tidak direstart atau dimigrasi oleh agent pada pekerjaan ini.
 Untuk memakai source terbaru: hentikan backend lama, backup data penting, muat
 .env di terminal backend, lalu jalankan kembali `make dev` (atau build/binary
-baru). Startup menjalankan migrasi sampai004 secara otomatis dan mempertahankan
-data001–003. CLI SSH harus memakai TMUX_MONITOR_DATA_DIR yang sama. Frontend Vite tetap
+baru). Source startup kini menuju migrasi005 (BELUM DIUJI); jangan menyamakan
+dengan baseline binary/CI schema004. CLI SSH harus memakai TMUX_MONITOR_DATA_DIR
+yang sama. Frontend Vite tetap
 pada 5173; backend 8080 untuk konfigurasi dev yang sekarang didokumentasikan.
 
 Terminal SSH eksperimental tersedia dengan opt-in dan aktivasi input terpisah;

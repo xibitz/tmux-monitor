@@ -9,7 +9,7 @@ All timestamps use RFC 3339 UTC. All responses under `/api` and `/ws` use
 
 | Method and path | Authorization | Request / response |
 | --- | --- | --- |
-| `GET /healthz` | Local listener | `{"status":"ok","schemaVersion":4}`; 503 if storage is unavailable |
+| `GET /healthz` | Local listener | `{"status":"ok","schemaVersion":5}` in current source (migration005 untested); 503 if storage is unavailable |
 | `POST /api/v1/auth/login` | Exact configured Origin, rate limited | `{username,password}` → `{user,csrfToken}` and session cookie; generic 401 for invalid credentials |
 | `GET /api/v1/me` | Session | `{user:{id,username,isAdmin},csrfToken}` |
 | `POST /api/v1/auth/logout` | Session + CSRF | 204; revoke session and expire cookie |
@@ -80,8 +80,9 @@ No raw SSH/command stderr is returned or persisted. Probe failures are audited.
 
 ## Experimental session rename (T20, partial)
 
-Disabled by default: `TMUX_MONITOR_MUTATIONS_ENABLED=true`. Only SSH/tmux3.8
-rename is implemented; create/kill and Agent mutation parity remain unimplemented.
+Disabled by default: `TMUX_MONITOR_MUTATIONS_ENABLED=true`. SSH/tmux3.8 rename
+is the previously verified slice. Create/kill source additions below are untested;
+Agent mutation parity remains unimplemented.
 `GET /api/v1/hosts/{id}/session-options` requires tmux:read and returns
 `{renameEnabled,canRename}`. Write requires tmux:read + tmux:write, login, exact
 Origin and CSRF. `PATCH /api/v1/hosts/{id}/sessions/{sid}` accepts only
@@ -122,6 +123,52 @@ is invalidated before dispatch; it is never used as mutation authority. Audit
 contains actor/host/epoch/native target/result only, not names, key or request body.
 Browser requires confirmation, clears drafts on close, and requires a fresh
 inventory before another attempt after failure. Gate host/device tests remain open.
+
+### Session create/kill additions — UNTESTED
+
+Implemented source is not qualified: the user explicitly requested development
+without testing. No test/build/browser validation or CI is claimed for this
+addition. Both existing MUTATIONS_ENABLED and the separate
+`TMUX_MONITOR_SESSION_LIFECYCLE_ENABLED=true` opt-in are required. Default false.
+Session options add `{lifecycleEnabled,canCreate,canKill}` with current permissions.
+
+`POST /api/v1/hosts/{id}/sessions` requires tmux:read + tmux:write, Origin, CSRF,
+Idempotency-Key and `{name,epoch,revision,confirmed:true}`. Inventory adds
+`createRevision` (`cr_...`): hash of the server epoch and sorted session identities,
+names and creation times, excluding window/process activity. Create requires an
+existing tmux3.8 server and a matching session set. No-server/empty epoch is
+server_required; this endpoint never bootstraps a tmux server. The final `tmux -N`
+guard checks epoch fingerprint and every session identity/name before detached
+new-session, with initial120x40 geometry and the host's default shell. No custom
+command, cwd, environment or socket override is accepted. Existing clients are
+not selected/resized by the catalog. New name restrictions match rename.
+
+`DELETE /api/v1/hosts/{id}/sessions/{sid}` requires tmux:read + tmux:kill,
+Origin, CSRF, Idempotency-Key and `{epoch,revision,confirmation,confirmed:true}`.
+Use the full session tree `revision`, not renameRevision. Confirmation must equal
+the native session ID exactly. A fresh snapshot and final server guard cover
+server/session identity/name and window/pane membership, names, indices, active
+state, dimensions and current process command. Changes produce conflict. The
+catalog issues only kill-session for that native ID, never kill-server. Killing
+a session detaches its clients and can terminate processes in its unshared
+windows; linked windows may remain in other sessions. UI displays that impact.
+
+Loop guards are bounded to64 sessions/windows/panes per relevant collection and
+64KiB serialized commands; larger targets return mutation_limit. These new loop
+formats, last-session kill behavior and empty-server create remain untested.
+Hash revisions retain the same ABA limitation. Host hooks may delay/alter state;
+missing/ambiguous acknowledgement remains operation_uncertain, with no retry.
+
+Create returns201, kill returns200 with `{operationId,state:"succeeded",sessionId}`.
+Migration005 adds result_target metadata to the durable ledger for create replay.
+The action is part of the request hash, so one key cannot be reused across
+rename/create/kill. Same reservation/audit/cache-invalidation/10000-record policy
+applies; pending survives restart and never dispatches again. Replays require
+fresh permissions and current credential binding, without checking a now-deleted
+kill target. Completion/result audit commit together. No terminal contents or
+request names are persisted. Downgrade5→4 discards create result IDs and therefore
+must not be used to recover/retry unknown operations. UI requires fresh inventory
+after failure and never retries automatically. No change is made to runtime/.env.
 
 ## Experimental SSH terminal (T12, partial)
 

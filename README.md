@@ -25,7 +25,8 @@ Aktifkan `TMUX_MONITOR_MUTATIONS_ENABLED=true` di environment backend, muat `.en
 seperti langkah development, lalu restart hub dari source/build terbaru.
 Fitur ini memerlukan **tmux 3.8**, izin `tmux:read` + `tmux:write` (admin sudah
 memiliki izin), dan konfigurasi SSH terverifikasi. Terminal boleh tetap nonaktif.
-Create/kill session dan operasi Agent belum tersedia.
+Source create/kill session sudah ditambahkan terpisah, tetapi belum diuji;
+lihat bagian di bawah. Operasi Agent belum tersedia.
 
 Periksa koneksi/inventaris pada detail host, klik **Ubah nama**, isi nama baru,
 centang konfirmasi dampak bersama, lalu **Simpan nama session**. Nama baru memakai
@@ -40,9 +41,37 @@ Catatan operasi persisten mencegah eksekusi ulang setelah restart hub, maksimal
 10000 catatan tanpa pembersihan otomatis. Jika batas tercapai, hub menolak operasi
 baru; jangan hapus catatan untuk memaksa retry hasil yang belum pasti.
 
-Build ini memakai **migrasi004**. Backup database sebelum upgrade. Downgrade ke
+Source terbaru memakai **migrasi005**. Backup database sebelum upgrade. Downgrade ke
 schema3 menghapus catatan operasi dan perlindungan idempotensi terkait; hindari
 downgrade saat ada hasil operasi yang belum pasti. `.env` tidak dimuat otomatis.
+
+## Create/kill session — kode belum diuji
+
+Bagian ini ditambahkan atas permintaan development tanpa testing. Belum ada
+pengujian, build/compile, browser verification atau CI untuk kode create/kill dan
+migrasi005 ini. Status tetap eksperimental dan default nonaktif.
+
+Flag tambahan `TMUX_MONITOR_SESSION_LIFECYCLE_ENABLED` harus diaktifkan bersama
+`TMUX_MONITOR_MUTATIONS_ENABLED` untuk menampilkan dan menerima kedua operasi.
+File `.env` pengguna tidak diubah. Rename tetap memakai flag mutasi sebelumnya.
+
+- **Buat session** memerlukan tmux3.8 yang sudah aktif, inventaris fresh dan
+  izin `tmux:read` + `tmux:write`. Isi nama dan centang konfirmasi. Nama mengikuti
+  aturan rename; session baru dibuat detached dengan ukuran awal120x40 dan shell
+  default host. Aplikasi tidak menerima custom command atau menyalakan server
+  tmux baru. Jika belum ada server, buat session awal melalui administrasi host.
+- **Hentikan session** memerlukan `tmux:read` + `tmux:kill`. Baca dampaknya,
+  ketik native ID session yang ditampilkan (misalnya `$0`), lalu centang konfirmasi.
+  Klien session tersebut dilepas; proses pada window yang tidak ditautkan ke
+  session lain dapat berhenti. Tombol ini berbeda dari menutup viewer terminal.
+
+Kedua operasi menggunakan precondition fresh, guard target, audit intent dan
+ledger persisten sebelum dispatch. Hasil yang belum pasti tidak dikirim ulang;
+periksa inventaris sebelum membuat permintaan lain. Migrasi005 menyimpan native
+ID hasil create agar replay mengembalikan metadata asli. Downgrade5→4 membuang
+metadata tersebut dan bukan cara untuk mengulang operasi. Batas guard64 item
+per koleksi dan command64KiB; target lebih besar ditolak. Seluruh perilaku baru
+ini masih perlu dikualifikasi saat testing kembali diminta.
 
 ## Terminal SSH eksperimental
 
@@ -50,7 +79,7 @@ Setelah SSH/inventaris berfungsi, operator dapat mencoba viewer dengan
 `TMUX_MONITOR_TERMINAL_ENABLED=true` pada environment hub, lalu restart backend.
 Muat `.env` seperti langkah development di bawah. Jangan menganggap fitur ini
 sudah lulus pengujian HP nyata atau akses Serve/Grants; gate tersebut masih terbuka.
-Backend baru menjalankan migrasi sampai **004**. Backup data sebelum
+Backend baru menjalankan migrasi sampai **005**. Backup data sebelum
 upgrade. CLI dan server harus tetap memakai direktori data yang sama.
 
 Di detail host, klik **Periksa koneksi** untuk inventaris baru, lalu **Buka

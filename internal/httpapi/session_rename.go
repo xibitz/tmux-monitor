@@ -30,7 +30,10 @@ func (s *Server) sessionOptions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _, err = s.renameAccess(r.Context(), u, found)
-	s.json(w, 200, map[string]bool{"renameEnabled": s.cfg.MutationsEnabled, "canRename": s.cfg.MutationsEnabled && err == nil})
+	renameAllowed := err == nil
+	_, _, killErr := s.lifecycleAccess(r.Context(), u, found, "tmux:kill")
+	lifecycle := s.cfg.MutationsEnabled && s.cfg.SessionLifecycleEnabled
+	s.json(w, 200, map[string]bool{"renameEnabled": s.cfg.MutationsEnabled, "canRename": s.cfg.MutationsEnabled && renameAllowed, "lifecycleEnabled": lifecycle, "canCreate": lifecycle && renameAllowed, "canKill": lifecycle && killErr == nil})
 }
 
 func (s *Server) renameAccess(ctx context.Context, u identity.User, id string) (Host, sshconnector.Record, error) {

@@ -21,7 +21,7 @@ pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus
 | T11 | DONE | Parser/epoch/revision, SSH snapshot, cache stale/revoke dan UI; uji tmux nyata terisolasi di macOS serta CI Linux lulus (empty/rename/split/kill/restart). |
 | T12 | PARTIAL | Terminal eksperimental: default read-only, aktivasi interactive dengan izin/tiket baru, input bersequence/rate limit, PTY raw, Unicode/control dan revoke/no-replay tests. Gate perangkat/akses nyata masih terbuka. |
 | T13 | PARTIAL | Heartbeat v2 + ping/pong, deadline browser/input, offline/pagehide, mode-response fence dan reopen read-only tanpa replay tersedia. Uji idle/timeout/sequence/restart hub terisolasi dan browser fixture lulus. Network switch/sleep/perangkat nyata tetap terbuka. |
-| T20 | PARTIAL | Rename SSH/tmux3.8: flag default-off, renameRevision, guard server, migrasi004 idempotensi, izin/konfirmasi/audit dan UI tersedia. Uji lokal SSH/race/API/browser lulus. Create/kill serta paritas Agent belum. |
+| T20 | PARTIAL | Rename baseline99c0791 teruji. Source create/kill + createRevision/guard subtree, konfirmasi ID, izin kill, flag lifecycle default-off dan migrasi005 ditambahkan **BELUM DIUJI** atas permintaan pengguna. Agent parity belum. |
 | T21 | TODO | Mutasi window/pane, snapshot pane dan suite dua transport. |
 | T22 | TODO | Enrollment/revoke Agent, credential, handshake/generation dan RPC. |
 | T23 | TODO | PTY Agent dan paritas mode terminal. |
@@ -102,7 +102,25 @@ termasuk SSH/tmux rename, migrasi4, API/idempotensi dan build statis Linux.
 - [x] ACL/read+write, CSRF/Origin, audit-before-dispatch, revoke sebelum write.
 - [x] Replay/concurrency/uncertain result/restart tidak mengeksekusi lagi; ledger bounded.
 - [x] UI konfirmasi, refresh setelah hasil, browser fixture 393px dan checks lokal.
-- [ ] Create/kill dengan precondition/idempotensi/konfirmasi dan audit; Agent parity.
+- [ ] Source create/kill dengan guard, konfirmasi dan idempotensi sudah ditambahkan,
+  tetapi **BELUM DIUJI**. Checkbox penerimaan tetap terbuka. Agent parity belum.
+
+Checkpoint development tanpa testing (instruksi pengguna terbaru): lifecycle flag
+defaultfalse, katalog tmux -N, existing-server create, full-tree kill, result_target
+migrasi005, endpoint dan UI sudah ditulis. Yang dilakukan hanya pembacaan source,
+peninjauan diff dan formatting; tidak ada test/build/compile/browser/CI. Push
+memakai `[skip ci]`. CI sukses99c0791 di atas hanya berlaku pada baseline rename.
+
+Kualifikasi yang masih pending bila testing kembali diminta:
+
+- [ ] Compile/TypeScript dan regresi rename/terminal pada schema005.
+- [ ] Migrasi4→5→4→5, metadata replay create, pending/restart, audit/disk failure.
+- [ ] Create existing empty server, no-server refusal, duplicate/epoch/session-set race.
+- [ ] Kill typing ID, ACL kill-vs-write, target disappearance/restart, last-session.
+- [ ] Loop guards W/P/S, literal format/Unicode, linked windows, batas64/64KiB,
+  perubahan pane/window/active/ukuran/process sebelum dispatch dan hook failures.
+- [ ] Cookie/Origin/CSRF, concurrent/replay/cross-action key, revoke dan lost reply.
+- [ ] Browser mobile, confirmation/focus/close, stale snapshot dan no retry.
 
 | Tahap | Prioritas | Hasil yang dapat didemokan | Gate keluar |
 |---|---:|---|---|
