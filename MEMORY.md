@@ -899,9 +899,10 @@ database, TLS, akun, key, sesi, socket tmux dan profil browser pengujian
 terisolasi. Runtime, data dan konfigurasi pribadi tetap di luar fixture.
 
 - `make build`, `make check`, `make test` (race detector Go dan 13 tes web),
-  `make package`, serta spike dua klien tmux lokal lulus. CI Linux untuk
-  `bc9aebb` lulus. [GitHub Actions](https://github.com/xibitz/tmux-monitor/actions/runs/42758596904)
-  Regresi service worker pada follow-up membuat total tes web menjadi 14.
+  `make package`, serta spike dua klien tmux lokal lulus. Regresi service
+  worker pada follow-up membuat total tes web menjadi 14. CI Linux lulus
+  untuk `bc9aebb` dan `1f651b4`. [CI checkpoint pertama](https://github.com/xibitz/tmux-monitor/actions/runs/42758596904)
+  · [CI checkpoint akhir](https://github.com/xibitz/tmux-monitor/actions/runs/42758967079)
 - Perbaikan build: pakai satu validator epoch di protokol Agent dan hapus
   impor Go yang tidak dipakai. Guard attach SSH/Agent dan watcher sekarang
   menolak kebijakan tmux yang dapat mengakhiri session/server saat detach.
