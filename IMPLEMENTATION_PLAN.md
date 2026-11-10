@@ -125,7 +125,8 @@ Kualifikasi yang masih pending bila testing kembali diminta:
 
 Irisan T21 snapshot pane ditulis tanpa testing pada 10 November 2026. Flag terpisah
 default-off, POST read-only dengan Origin/CSRF, snapshot SSH bounded dan viewer teks
-tersedia dalam source. Build, uji lokal, browser dan CI belum dijalankan.
+tersedia pada source `02677dc` (push SSH `[skip ci]`). Build, uji lokal,
+browser dan CI belum dijalankan.
 
 - [ ] Kualifikasi target pane/link/restart/ACL revoke, capture tanpa perubahan
   pilihan aktif atau paste buffer, batas256KiB/64KiB dan UTF-8/truncation.

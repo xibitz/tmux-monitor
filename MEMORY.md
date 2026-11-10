@@ -635,7 +635,8 @@ diff dilakukan tanpa menyentuh `.env`, `.data`, host, atau proses pengguna.
    marker/kasus output limit/UTF-8, fresh guard pane-linked/epoch/resize/revoke,
    tmux actual tanpa ubah pane/paste buffer, privasi log/cache, UI mobile dan
    lifecycle request. Jangan jalankan selama instruksi tanpa testing berlaku.
-   Window/pane mutations dan Agent parity belum. Push melalui SSH `[skip ci]`.
+   Window/pane mutations dan Agent parity belum. Source `02677dc` sudah dipush
+   melalui SSH dengan `[skip ci]`; tidak ada hasil uji/CI baru yang diklaim.
 
 ## Titik lanjut tepat
 
