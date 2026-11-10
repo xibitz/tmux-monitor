@@ -1,6 +1,6 @@
 # Memory dan serah-terima implementasi
 
-Terakhir diperbarui: 7 November 2026. Baca file ini sebelum melanjutkan pekerjaan.
+Terakhir diperbarui: 10 November 2026. Baca file ini sebelum melanjutkan pekerjaan.
 Dokumen ini menyimpan keadaan pekerjaan; spesifikasi produk tetap di
 [PRD.md](PRD.md), urutan task dan acceptance gate di
 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md), kontrak API aktual di
@@ -8,7 +8,7 @@ Dokumen ini menyimpan keadaan pekerjaan; spesifikasi produk tetap di
 
 **Instruksi pengguna terbaru: lanjut development tanpa testing.** Pengujian
 otomatis/browser/CI ditunda sampai pengguna memberi arahan berbeda. Checkpoint
-create/kill di bawah hanya source + format/review; build/compile juga tidak
+create/kill dan snapshot pane di bawah hanya source + format/review; build/compile juga tidak
 dijalankan pada turn ini. Jangan memakai CI rename lama sebagai bukti kode baru.
 
 ## Tujuan dan keadaan saat ini
@@ -33,13 +33,15 @@ Rename session SSH/tmux3.8 eksperimental tersedia dengan flag mutasi terpisah,
 konfirmasi, guard identitas dan ledger idempotensi persisten. Source create/kill
 telah ditambahkan di belakang flag baru default-off; **belum diuji atau dikompilasi**.
 Migrasi005 juga belum diuji; database/runtime pengguna belum diupgrade.
+Source snapshot pane SSH read-only kini tersedia dengan flag terpisah default-off.
+Belum diuji; tidak ada perubahan schema untuk irisan ini.
 
 Baseline sebelum irisan T12: `33466f0` (SSH/inventaris); dokumentasi awal handoff:
 `b7b8c1c`. Sebelumnya `1d8c1cf` (UX allowlist), `5c99762` (fondasi), `a879f8c`
 (rancangan). Commit dokumentasi sesudah kode tidak mengubah implementasinya.
 
-**T00, T10, T11 DONE. T02/T03/T12/T13/T20/T31/T32 PARTIAL. Task lain TODO.
-Berikutnya gate akses/perangkat T03/T12/T31, gangguan T13 dan mutasi T20.**
+**T00, T10, T11 DONE. T02/T03/T12/T13/T20/T21/T31/T32 PARTIAL. Task lain TODO.
+Berikutnya mutasi window/pane T21; gate testing T20/T21 dan perangkat tetap terbuka.**
 DONE pada T10/T11 berarti acceptance kode/automated tests yang dicatat telah
 lulus, bukan bukti sshd/tailnet/HP pengguna sudah diuji. Agent belum tersedia; M1 dan gate rilis P0 belum selesai. Terminal memerlukan
 opt-in operator, bukan rilis P0 yang telah lulus gate.
@@ -600,6 +602,41 @@ create empty existing server/no bootstrap/duplicate/session-set race; kill tree
 race/typedID/lastsession/linkedwindow; nested format literals/limits; mobile UI,
 focus/close/stale snapshot dan no-retry. Tabel acceptance pending ada di plan.
 
+## Checkpoint T21 snapshot pane — BELUM DIUJI (10 November)
+
+Baseline `6364837`. Instruksi user tetap lanjut tanpa testing. Source saja;
+tidak menjalankan test, compiler/build, browser, atau CI. Formatting dan review
+diff dilakukan tanpa menyentuh `.env`, `.data`, host, atau proses pengguna.
+
+1. Kontrak ditulis dulu di docs/api-v1.md. POST read-only
+   `/hosts/{id}/panes/{pid}/snapshot` memakai Origin/CSRF/login/`tmux:read`,
+   native ID `%N`, `epoch` dan `pane.revision` dari inventaris. Tolak query atau
+   field ekstra. Flag `TMUX_MONITOR_PANE_SNAPSHOT_ENABLED` defaultfalse dan
+   independen dari terminal/mutasi. Options terminal menambah paneSnapshotEnabled.
+2. `internal/tmux/pane_snapshot.go`: parse snapshot fresh, cocokkan epoch/revision,
+   guard fingerprint server + window/pane ID, active/dimensi/current-command,
+   lalu `capture-pane -p -S -100` di antrean yang sama. Tidak attach, select,
+   resize, atau membuat paste buffer. Marker membedakan hasil kosong dan conflict.
+   Guard64KiB, raw256KiB termasuk marker, hasil tail64KiB pada batas rune. Ganti UTF-8 rusak,
+   buang control/bidi overrides, `truncated` hanya untuk clipping byte.
+3. `internal/connector/ssh/pane_snapshot.go`: koneksi SSH terverifikasi yang sama
+   untuk inventaris dan capture, gate 4 global/1 per host, deadline10detik,
+   tmux3.8. Revalidasi izin/key sebelum capture. No stale fallback atau retry.
+   Overflow raw ditolak tanpa isi, bukan mengembalikan data parsial.
+4. `internal/httpapi/pane_snapshot.go`: fresh authorization juga sebelum hasil,
+   audit intent/outcome metadata saja dan fail closed bila audit gagal. Response
+   no-store; tidak memasukkan isi pane ke cache inventaris, SQLite atau log.
+   Tidak ada migrasi baru. Schema005 dari baseline T20 masih belum diuji.
+5. `PaneSnapshotViewer.tsx` + main.tsx/styles.css: buka dari pane inventaris
+   fresh, capture hanya setelah klik, render plain text, waktu dan tanda potong.
+   Clear saat capture baru/close/pagehide; respons terlambat diabaikan. Tidak ada
+   polling, streaming, clipboard otomatis, atau browser persistence.
+6. T21 tetap PARTIAL. Kualifikasi yang ditunda: build/TypeScript, route/ACL/CSRF,
+   marker/kasus output limit/UTF-8, fresh guard pane-linked/epoch/resize/revoke,
+   tmux actual tanpa ubah pane/paste buffer, privasi log/cache, UI mobile dan
+   lifecycle request. Jangan jalankan selama instruksi tanpa testing berlaku.
+   Window/pane mutations dan Agent parity belum. Push melalui SSH `[skip ci]`.
+
 ## Titik lanjut tepat
 
 1. Baca hasil CI/commit checkpoint interactive terbaru. Cek git status dan
@@ -617,8 +654,8 @@ focus/close/stale snapshot dan no-retry. Tabel acceptance pending ada di plan.
 5. T20: source create/kill sekarang tersedia tetapi belum diuji. Tetap ikuti
    instruksi no-testing pengguna. Kualifikasi checklist di atas hanya bila
    pengguna mengizinkan testing kembali; jangan menandai selesai dari review
-   source. Bila diminta melanjutkan development saja, lanjut T21 kontrak window/
-   pane memakai fondasi ini tanpa menjalankan operasi nyata. Tidak ada raw-shell/
+   source. T21 snapshot sudah ditulis; berikutnya kontrak mutasi window/pane
+   tanpa menjalankan operasi nyata. Tidak ada raw-shell/
    kill-server API; ledger pending harus tetap retained setelah restart.
 6. Ikuti aturan implementasi di atas; perbarui memory/tasklist/CI dan push SSH.
 

@@ -170,6 +170,45 @@ request names are persisted. Downgrade5→4 discards create result IDs and there
 must not be used to recover/retry unknown operations. UI requires fresh inventory
 after failure and never retries automatically. No change is made to runtime/.env.
 
+## Experimental pane snapshot (T21, source only; untested)
+
+`TMUX_MONITOR_PANE_SNAPSHOT_ENABLED` defaults to false and is independent of the
+terminal/administrative mutation flags. `GET /api/v1/terminal/options` adds
+`paneSnapshotEnabled`. The current implementation targets SSH with tmux3.8.
+
+`POST /api/v1/hosts/{id}/panes/{pid}/snapshot` accepts `{epoch,revision}` from
+fresh inventory (`pane.revision`, not window/session revision). `pid` must be a
+native `%N` ID. This POST is a one-shot read action; it uses the existing Origin
+and CSRF checks in addition to login and `tmux:read`. No caller-defined command,
+history range, socket, or output format is accepted. Query parameters are rejected.
+
+The connector reuses SSH pin/address/user checks, the shared observation gate
+(4 global / 1 per host) and 10-second deadline. It reads inventory on the same
+connection and compares epoch and pane revision. A fixed `if-shell -F` guard
+rechecks server fingerprint and pane/window identity, active flag, dimensions
+and current command just before `capture-pane -p -S -100`. No active pane is
+selected, no resize/attach occurs, and no tmux paste buffer is created. The
+capture is the visible pane plus up to100 preceding lines; it is best-effort
+text, not a reconstruction of a full-screen terminal or a live stream.
+
+200 returns `{paneId,capturedAt,text,truncated}`. The serialized guard command
+is capped at64KiB. Raw stdout is capped at256KiB
+including its protocol marker; overflow fails without returning partial output.
+The result retains the most recent64KiB at UTF-8 boundaries after sanitization;
+`truncated` reports byte clipping, not whether older history exists. The
+browser renders plain text only and discards it on close, pagehide or a new
+capture. No automatic capture, polling or reconnect is performed.
+
+ACL/login/credential reference are revalidated before capture and again before
+the response. Metadata-only audit records intent and outcome; failure to record
+either prevents delivery. The text is never put into inventory cache, SQLite,
+logs, or browser persistence. Responses use `Cache-Control: no-store`. Target
+change returns409, missing/inaccessible target404, disabled/over-limit503,
+unsupported/invalid422 and busy429. No stale snapshot fallback is used.
+
+Source only: build, tests, browser verification and CI are deferred at the user's
+request. Window/pane mutations and Agent parity remain future work.
+
 ## Experimental SSH terminal (T12, partial)
 
 Disabled by default: operator must set `TMUX_MONITOR_TERMINAL_ENABLED=true`.
@@ -177,7 +216,7 @@ This is a development slice, not completion of the P0 access/device gates.
 SSH session viewers start read-only. Interactive activation is described below;
 viewport resize remains rejected. No automatic reconnect or input replay. All requests require login.
 
-`GET /api/v1/terminal/options` returns `{enabled,mode:"read_only"}`.
+`GET /api/v1/terminal/options` returns `{enabled,mode:"read_only",paneSnapshotEnabled}`.
 `POST /api/v1/terminal/tickets` requires exact Origin, REST CSRF and `tmux:read`.
 Body: `{hostId,sessionId,epoch}` (native `$N` session ID). Response:
 `{ticket,expiresIn:30}`. The random ticket is stored hashed, usable once, bound to

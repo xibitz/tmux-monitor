@@ -3,6 +3,8 @@ import type { FormEvent, ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { SessionRename } from "./SessionRename";
 import { SessionLifecycle } from "./SessionLifecycle";
+import { PaneSnapshotViewer } from "./PaneSnapshotViewer";
+import type { PaneSnapshotTarget } from "./PaneSnapshotViewer";
 import {
   Activity,
   ArrowLeft,
@@ -1112,6 +1114,9 @@ function HostDetails({
   const [metadataAttempt, setMetadataAttempt] = useState(0);
   const [inventory, setInventory] = useState<Inventory>();
   const [terminalEnabled, setTerminalEnabled] = useState(false);
+  const [paneSnapshotEnabled, setPaneSnapshotEnabled] = useState(false);
+  const [paneSnapshotTarget, setPaneSnapshotTarget] =
+    useState<PaneSnapshotTarget>();
   const [canRename, setCanRename] = useState(false);
   const [canCreate, setCanCreate] = useState(false);
   const [canKill, setCanKill] = useState(false);
@@ -1142,9 +1147,14 @@ function HostDetails({
   }>();
   useEffect(() => {
     let active = true;
-    void api<{ enabled: boolean }>("/terminal/options")
+    void api<{ enabled: boolean; paneSnapshotEnabled?: boolean }>(
+      "/terminal/options",
+    )
       .then((value) => {
-        if (active) setTerminalEnabled(value.enabled);
+        if (active) {
+          setTerminalEnabled(value.enabled);
+          setPaneSnapshotEnabled(value.paneSnapshotEnabled === true);
+        }
       })
       .catch(() => {});
     return () => {
@@ -1186,6 +1196,7 @@ function HostDetails({
     }
   }
   async function inspect() {
+    setPaneSnapshotTarget(undefined);
     setBusy(true);
     setObservationError("");
     try {
@@ -1220,10 +1231,12 @@ function HostDetails({
       setBusy(false);
     }
   }
+  const selectedPaneSnapshot =
+    paneSnapshotTarget?.hostId === host.id ? paneSnapshotTarget : undefined;
   return (
     <Modal
       title={confirm ? "Hapus profil host?" : host.label}
-      wide={!!terminalSession}
+      wide={!!terminalSession || !!selectedPaneSnapshot}
       onClose={() => {
         if (!busy) onClose();
       }}
@@ -1240,6 +1253,18 @@ function HostDetails({
             onBack={() => setTerminalSession(undefined)}
           />
         </Suspense>
+      ) : selectedPaneSnapshot ? (
+        <PaneSnapshotViewer
+          key={JSON.stringify([
+            selectedPaneSnapshot.hostId,
+            selectedPaneSnapshot.epoch,
+            selectedPaneSnapshot.paneId,
+            selectedPaneSnapshot.revision,
+          ])}
+          target={selectedPaneSnapshot}
+          hostLabel={host.label}
+          onBack={() => setPaneSnapshotTarget(undefined)}
+        />
       ) : confirm ? (
         <>
           <p className="modal-description">
@@ -1505,6 +1530,34 @@ function HostDetails({
                                   {pane.active && (
                                     <span className="active-label">aktif</span>
                                   )}
+                                  {paneSnapshotEnabled &&
+                                    host.transport === "ssh" &&
+                                    inventory.hostId === host.id &&
+                                    inventory.capabilities.tmuxVersion ===
+                                      "3.8" && (
+                                      <button
+                                        type="button"
+                                        className="button secondary pane-snapshot-button"
+                                        aria-label={`Snapshot pane ${pane.id}`}
+                                        disabled={
+                                          busy ||
+                                          inventory.stale ||
+                                          !inventory.epoch ||
+                                          !pane.revision
+                                        }
+                                        onClick={() =>
+                                          setPaneSnapshotTarget({
+                                            hostId: host.id,
+                                            paneId: pane.id,
+                                            windowName: window.name,
+                                            epoch: inventory.epoch,
+                                            revision: pane.revision,
+                                          })
+                                        }
+                                      >
+                                        Snapshot pane
+                                      </button>
+                                    )}
                                 </li>
                               ))}
                             </ul>

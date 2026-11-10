@@ -6,7 +6,7 @@
 
 ## Pelacakan pekerjaan aktual
 
-Diperbarui 7 November 2026. Baca [MEMORY.md](MEMORY.md) untuk langkah implementasi,
+Diperbarui 10 November 2026. Baca [MEMORY.md](MEMORY.md) untuk langkah implementasi,
 aturan, hasil verifikasi, dan titik lanjut agent. Tabel ini mencatat status aktual;
 kata **Selesai** pada deskripsi task di bawah berarti *kriteria penerimaan*, bukan
 pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus.
@@ -22,7 +22,7 @@ pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus
 | T12 | PARTIAL | Terminal eksperimental: default read-only, aktivasi interactive dengan izin/tiket baru, input bersequence/rate limit, PTY raw, Unicode/control dan revoke/no-replay tests. Gate perangkat/akses nyata masih terbuka. |
 | T13 | PARTIAL | Heartbeat v2 + ping/pong, deadline browser/input, offline/pagehide, mode-response fence dan reopen read-only tanpa replay tersedia. Uji idle/timeout/sequence/restart hub terisolasi dan browser fixture lulus. Network switch/sleep/perangkat nyata tetap terbuka. |
 | T20 | PARTIAL | Rename baseline99c0791 teruji. Source create/kill + createRevision/guard subtree, konfirmasi ID, izin kill, flag lifecycle default-off dan migrasi005 ditambahkan **BELUM DIUJI** atas permintaan pengguna. Agent parity belum. |
-| T21 | TODO | Mutasi window/pane, snapshot pane dan suite dua transport. |
+| T21 | PARTIAL | Source snapshot pane SSH read-only dengan guard target, batas output dan UI tersedia **BELUM DIUJI**. Mutasi window/pane dan paritas Agent belum. |
 | T22 | TODO | Enrollment/revoke Agent, credential, handshake/generation dan RPC. |
 | T23 | TODO | PTY Agent dan paritas mode terminal. |
 | T24 | TODO | Heartbeat, reconnect/jitter, capability refresh dan rekonsiliasi. |
@@ -122,6 +122,16 @@ Kualifikasi yang masih pending bila testing kembali diminta:
   perubahan pane/window/active/ukuran/process sebelum dispatch dan hook failures.
 - [ ] Cookie/Origin/CSRF, concurrent/replay/cross-action key, revoke dan lost reply.
 - [ ] Browser mobile, confirmation/focus/close, stale snapshot dan no retry.
+
+Irisan T21 snapshot pane ditulis tanpa testing pada 10 November 2026. Flag terpisah
+default-off, POST read-only dengan Origin/CSRF, snapshot SSH bounded dan viewer teks
+tersedia dalam source. Build, uji lokal, browser dan CI belum dijalankan.
+
+- [ ] Kualifikasi target pane/link/restart/ACL revoke, capture tanpa perubahan
+  pilihan aktif atau paste buffer, batas256KiB/64KiB dan UTF-8/truncation.
+- [ ] Uji redaksi audit/log, no-store, hasil terlambat setelah close/pagehide dan
+  tampilan ponsel. Uji hanya bila pengguna mengizinkan kembali.
+- [ ] Lanjutkan mutasi window/pane dan paritas Agent.
 
 | Tahap | Prioritas | Hasil yang dapat didemokan | Gate keluar |
 |---|---:|---|---|
@@ -225,7 +235,7 @@ Kode umum: `401 unauthenticated`, `403 forbidden`, `404 not_found`, `409 conflic
 | `PATCH/DELETE /api/v1/hosts/{hostId}/windows/{wid}` | `tmux:write`/`tmux:kill` | rename/kill + precondition |
 | `POST /api/v1/hosts/{hostId}/windows/{wid}/panes` | `tmux:write` | split direction, target pane, precondition |
 | `DELETE /api/v1/hosts/{hostId}/panes/{pid}` | `tmux:kill` | kill pane + precondition |
-| `GET /api/v1/hosts/{hostId}/panes/{pid}/snapshot` | `tmux:read` | bounded capture text + truncated flag |
+| `POST /api/v1/hosts/{hostId}/panes/{pid}/snapshot` | `tmux:read` + CSRF/Origin | one-shot read, expected epoch/revision → bounded text + truncated flag |
 | `POST /api/v1/hosts/{hostId}/panes/{pid}/select` | `tmux:write` | P1; viewer-scoped jika capability ada |
 | `POST /api/v1/hosts/{hostId}/panes/{pid}/resize` | `tmux:write` | P1; eksplisit, policy/capability gate |
 | `GET /api/v1/audit` | `audit:read` | filter actor/host/action/waktu; metadata saja |

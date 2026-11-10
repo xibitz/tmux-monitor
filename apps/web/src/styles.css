@@ -1231,6 +1231,26 @@ p {
   margin-left: auto;
   color: #7f9673;
 }
+.pane-snapshot-button {
+  min-height: 44px;
+}
+.pane-snapshot {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.pane-snapshot pre {
+  max-width: 100%;
+  max-height: min(52vh, 34rem);
+  overflow: auto;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #101813;
+  color: #e3eadd;
+  font-size: 12px;
+  white-space: pre;
+}
 .active-label {
   font-size: 8px;
   padding: 2px 4px;

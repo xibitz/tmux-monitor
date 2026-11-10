@@ -73,6 +73,23 @@ metadata tersebut dan bukan cara untuk mengulang operasi. Batas guard64 item
 per koleksi dan command64KiB; target lebih besar ditolak. Seluruh perilaku baru
 ini masih perlu dikualifikasi saat testing kembali diminta.
 
+## Snapshot pane SSH — kode belum diuji
+
+Snapshot menampilkan teks dari satu pane tanpa membuka terminal interaktif,
+memilih pane aktif, atau mengubah ukuran window. Implementasi ini belum di-build
+atau diuji, dan tetap nonaktif secara default.
+
+Untuk pengembangan, snapshot memakai flag terpisah
+`TMUX_MONITOR_PANE_SNAPSHOT_ENABLED`, dengan tmux 3.8 dan izin `tmux:read`.
+Tombol **Snapshot pane** muncul pada inventaris SSH yang mendukungnya. Buka
+pane yang diinginkan lalu klik **Ambil snapshot**. Tampilan memuat area pane
+dan hingga 100 baris riwayat. Jika teks dipotong, bagian terbaru yang ditampilkan.
+Ini tampilan sekali ambil, sehingga hasil tidak berubah sampai diminta lagi.
+
+Isi snapshot hanya berada di memori tampilan dan dibuang saat ditutup. Audit
+mencatat operasi, bukan isinya. Snapshot tidak menambah migrasi dan tidak
+memerlukan pengaktifan terminal atau mutasi. Window/pane mutation masih terpisah.
+
 ## Terminal SSH eksperimental
 
 Setelah SSH/inventaris berfungsi, operator dapat mencoba viewer dengan

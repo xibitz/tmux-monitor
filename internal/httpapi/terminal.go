@@ -34,7 +34,7 @@ var sessionTarget = regexp.MustCompile(`^\$[0-9]{1,16}$`)
 var terminalEpoch = regexp.MustCompile(`^e_[0-9a-f]{64}$`)
 
 func (s *Server) terminalOptions(w http.ResponseWriter, r *http.Request) {
-	s.json(w, 200, map[string]any{"enabled": s.cfg.TerminalEnabled, "mode": "read_only"})
+	s.json(w, 200, map[string]any{"enabled": s.cfg.TerminalEnabled, "mode": "read_only", "paneSnapshotEnabled": s.cfg.PaneSnapshotEnabled})
 }
 
 func (s *Server) terminalTicket(w http.ResponseWriter, r *http.Request) {

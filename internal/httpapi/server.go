@@ -44,6 +44,7 @@ type Server struct {
 	loginAttempts        int
 	ssh                  sshObserver
 	terminal             terminalOpener
+	paneSnapshots        paneCapturer
 	mutations            sessionRenamer
 	lifecycle            sessionLifecycle
 	viewMu               sync.Mutex
@@ -64,6 +65,7 @@ func New(db *sql.DB, cfg config.Config, assets fs.FS, logger *slog.Logger) *Serv
 	manager := sshconnector.New(s.credentials(), cfg.AllowedSSHHosts)
 	s.ssh = manager
 	s.terminal = manager
+	s.paneSnapshots = manager
 	s.mutations = manager
 	s.lifecycle = manager
 	api := http.NewServeMux()
@@ -78,6 +80,7 @@ func New(db *sql.DB, cfg config.Config, assets fs.FS, logger *slog.Logger) *Serv
 	api.HandleFunc("PATCH /api/v1/hosts/{id}", s.updateHost)
 	api.HandleFunc("DELETE /api/v1/hosts/{id}", s.deleteHost)
 	api.HandleFunc("GET /api/v1/hosts/{id}/inventory", s.inventory)
+	api.HandleFunc("POST /api/v1/hosts/{id}/panes/{pid}/snapshot", s.capturePane)
 	api.HandleFunc("GET /api/v1/hosts/{id}/session-options", s.sessionOptions)
 	api.HandleFunc("PATCH /api/v1/hosts/{id}/sessions/{sid}", s.renameSession)
 	api.HandleFunc("POST /api/v1/hosts/{id}/sessions", s.createSession)
