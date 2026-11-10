@@ -467,7 +467,9 @@ setelah host diperiksa dari halaman detail. Untuk profil Agent, tambahkan
 `--control-events` pada `agent run`. Bila stream terputus atau tmux tidak
 kompatibel, halaman detail mengambil snapshot secara berkala. Fitur ini
 masih eksperimental. Viewer live pane independen tetap dinonaktifkan sampai
-isolasi dari klien desktop dibuktikan. [Panduan control mode tmux](https://github.com/tmux/tmux/wiki/Control-Mode)
+isolasi dari klien desktop dibuktikan. Watcher dan viewer PTY memerlukan
+`exit-unattached=off` dan `destroy-unattached=off` agar melepas klien
+tidak memicu penghentian session atau server. [Panduan control mode tmux](https://github.com/tmux/tmux/wiki/Control-Mode)
 
 Detail host mendukung filter inventaris dan sampai empat tab session. Pindah
 tab membuka viewer read-only dan melepas viewer lama. Favorit host disimpan

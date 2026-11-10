@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/coder/websocket"
 	"github.com/xibitz/tmux-monitor/internal/agentproto"

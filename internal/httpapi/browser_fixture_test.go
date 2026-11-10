@@ -70,7 +70,19 @@ func TestBrowserFixture(t *testing.T) {
 	h.server.cfg.Listen = "127.0.0.1:18081"
 	h.server.cfg.Origin = "http://localhost:18081"
 	h.server.cfg.Development = true
-	terminalMode := os.Getenv("TMUX_MONITOR_BROWSER_TERMINAL") == "1"
+	qualify := os.Getenv("TMUX_MONITOR_BROWSER_QUALIFICATION") == "1"
+	terminalMode := qualify || os.Getenv("TMUX_MONITOR_BROWSER_TERMINAL") == "1"
+	if qualify {
+		h.server.cfg.Origin = "https://localhost:18081"
+		h.server.cfg.ControlEvents = true
+		h.server.cfg.CodingHooks = true
+		h.server.cfg.WebPush = true
+		_, err := h.db.Exec(`INSERT INTO coding_notices(host_id,source,kind,confidence,epoch,session_id,pane_id,dedupe,occurred_at)
+			VALUES ('ssh-test','codex','turn_completed','unknown','','','','fixture','2026-11-10T00:00:00Z')`)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 	mutationMode := os.Getenv("TMUX_MONITOR_BROWSER_MUTATIONS") == "1"
 	var mutationMu sync.Mutex
 	fixtureName := "session-untuk-uji"
@@ -138,7 +150,14 @@ func TestBrowserFixture(t *testing.T) {
 		}
 		mutationMu.Lock()
 		defer mutationMu.Unlock()
-		return tmux.Parse(host.ID, host.Socket, "3.8", []byte("F|123|1700000000|/tmp/fixture/default|3.8\nS\t$0\t"+fixtureName+"\t1700000001\nW\t$0\t@0\teditor\t0\t1\nP\t@0\t%0\t1\t120\t39\tzsh\nF|123|1700000000|/tmp/fixture/default|3.8\n"))
+		const fingerprint = "F|123|1700000000|/tmp/fixture/default|3.8\n"
+		data := fingerprint + "S\t$0\t" + fixtureName + "\t1700000001\nW\t$0\t@0\teditor\t0\t1\nP\t@0\t%0\t1\t120\t39\tzsh\n"
+		if qualify {
+			for i := 1; i <= 4; i++ {
+				data += fmt.Sprintf("S\t$%d\tfixture-%d\t1700000001\nW\t$%d\t@%d\teditor\t0\t1\nP\t@%d\t%%%d\t1\t120\t39\tzsh\n", i, i, i, i, i, i)
+			}
+		}
+		return tmux.Parse(host.ID, host.Socket, "3.8", []byte(data+fingerprint))
 	})
 	listener, err := net.Listen("tcp", h.server.cfg.Listen)
 	if err != nil {
@@ -151,10 +170,16 @@ func TestBrowserFixture(t *testing.T) {
 		defer cancel()
 		_ = h.server.Shutdown(ctx)
 	}()
-	go func() { _ = srv.Serve(listener) }()
+	if qualify {
+		go func() {
+			_ = srv.ServeTLS(listener, os.Getenv("TMUX_MONITOR_BROWSER_CERT"), os.Getenv("TMUX_MONITOR_BROWSER_KEY"))
+		}()
+	} else {
+		go func() { _ = srv.Serve(listener) }()
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	t.Log("Browser fixture: http://localhost:18081; login admin with testPassword from server_test.go. SSH/terminal output simulated; production CSP when terminal mode is enabled.")
+	t.Logf("Browser fixture: %s; login admin with testPassword from server_test.go. SSH/terminal output simulated.", h.server.cfg.Origin)
 	select {
 	case <-ctx.Done():
 	case <-time.After(5 * time.Minute):

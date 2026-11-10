@@ -38,7 +38,6 @@ func (m CodingMessage) Valid() bool {
 		(epochPattern.MatchString(m.Epoch) && tmux.ValidSessionID(m.SessionID) && tmux.ValidPaneID(m.PaneID)))
 }
 
-var epochPattern = regexp.MustCompile(`^e_[a-f0-9]{64}$`)
 var dedupePattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 
 func (n CodingNotice) Valid() bool {

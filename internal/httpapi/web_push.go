@@ -207,11 +207,19 @@ func (s *Server) queueWebPush(hostID string) {
 		defer func() { <-s.pushSlots }()
 		ctx, cancel := context.WithTimeout(s.terminalRoot, 25*time.Second)
 		defer cancel()
-		s.deliverWebPush(ctx, hostID)
+		client := &http.Client{
+			Transport: &http.Transport{DialContext: dialPush},
+			Timeout:   4 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
+		defer client.CloseIdleConnections()
+		s.deliverWebPush(ctx, hostID, client)
 	}()
 }
 
-func (s *Server) deliverWebPush(ctx context.Context, hostID string) {
+func (s *Server) deliverWebPush(ctx context.Context, hostID string, client *http.Client) {
 	rows, err := s.db.QueryContext(ctx, `SELECT p.id FROM push_subscriptions p
 		JOIN users u ON u.id=p.user_id JOIN hosts h ON h.id=? WHERE u.disabled_at IS NULL
 		AND (u.is_admin=1 OR (SELECT count(*) FROM host_access
@@ -241,14 +249,7 @@ func (s *Server) deliverWebPush(ctx context.Context, hostID string) {
 	if err != nil {
 		return
 	}
-	client := &http.Client{
-		Transport: &http.Transport{DialContext: dialPush},
-		Timeout:   4 * time.Second,
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-	defer client.CloseIdleConnections()
+
 	for _, id := range ids {
 		if ctx.Err() != nil {
 			return

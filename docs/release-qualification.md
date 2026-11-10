@@ -1,7 +1,6 @@
 # Kualifikasi rilis P0
 
-Status awal **BELUM DIJALANKAN**. Dokumen ini menyediakan prosedur T34.
-Jalankan hanya setelah pengujian diizinkan. Hasil dari satu transport atau
+Kualifikasi lokal awal tercatat di [MEMORY.md](../MEMORY.md#checkpoint-build-dan-kualifikasi-10-november). Matriks staging T34 masih terbuka. Hasil dari satu transport atau
 perangkat tidak berlaku sebagai bukti bagi yang lain.
 
 ## Persiapan lab
@@ -79,7 +78,7 @@ terbukti.
 
 Gunakan host lab dengan beban sintetis yang sama untuk SSH dan Agent.
 Catat versi hub/Agent/tmux/browser, OS, RTT, ukuran viewport dan interval
-sampel. Jalankan setelah pengujian kembali diizinkan.
+sampel. Catat pengukuran fixture lokal terpisah dari hasil staging.
 
 | Skenario | Ukuran yang dicatat |
 |---|---|
@@ -96,3 +95,13 @@ Catat hanya ukuran, durasi dan jumlah frame. Simpan hasil agregat tanpa
 isi frame, alamat privat, atau identitas host. Jalankan setidaknya tiga kali,
 laporkan median dan P95, lalu ulang setelah perubahan buffer/reconnect
 yang dipilih berdasarkan hasil.
+
+### Regresi browser lokal
+
+Build aset dahulu dengan `make build`. Siapkan Playwright dan Chromium,
+lalu jalankan `bash scripts/qualify-browser.sh` pada mesin pengembangan.
+Tetapkan `PLAYWRIGHT_MODULE` jika modul berada di direktori terpisah dan
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE` bila memakai executable tertentu. Runner
+membuka server HTTPS fixture pada port 18081 dengan sertifikat sementara,
+kemudian menutupnya setelah pengujian. Uji ini memakai SSH/terminal
+simulasi dan viewport 393×852. Hasil timing tab adalah baseline UI lokal.

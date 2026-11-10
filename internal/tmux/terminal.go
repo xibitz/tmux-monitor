@@ -1,6 +1,8 @@
 package tmux
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -52,6 +54,12 @@ func CheckClientTarget(output []byte, tty, session string) error {
 	return nil
 }
 
+var ErrTerminalDetachPolicy = errors.New("terminal_detach_policy")
+
+// Check both tmux settings in the server command queue immediately before an
+// attach. A viewer must never become the last client of a destructive session.
+const safeDetachFormat = "#{&&:#{||:#{==:#{exit-unattached},0},#{==:#{exit-unattached},off}},#{==:#{destroy-unattached},off}}"
+
 // TerminalPolicy is freshly read from tmux, never from the inventory cache.
 type TerminalPolicy struct {
 	Cols      int
@@ -87,7 +95,9 @@ func TerminalPolicyArgs(socket, session string) ([]string, error) {
 		"show-options", "-gwv", "window-size", ";",
 		"display-message", "-p", "-t", session + ":", "T|#{session_id}|#{status}|#{window_id}|#{window_width}|#{window_height}", ";",
 		"list-windows", "-t", session, "-F", "W|#{window_id}|#{window-size}|#{window_width}|#{window_height}", ";",
-		"display-message", "-p", "F|#{pid}|#{start_time}|#{q:socket_path}|#{version}"}, nil
+		"display-message", "-p", "F|#{pid}|#{start_time}|#{q:socket_path}|#{version}", ";",
+		"show-options", "-sv", "exit-unattached", ";",
+		"show-options", "-Av", "-t", session + ":", "destroy-unattached"}, nil
 }
 
 func terminalShell(args []string) string {
@@ -128,21 +138,22 @@ func attachArgs(socket, session string, interactive, local bool) ([]string, erro
 	if interactive {
 		flags = "ignore-size"
 	}
-	args := []string{"tmux"}
+	args := []string{"tmux", "-N"}
 	if local {
-		args = append(args, "-N", "-u")
+		args = append(args, "-u")
 	}
-	args = append(args, "-L", socket, "attach-session")
-	if local {
-		args = append(args, "-E")
-	}
-	return append(args, "-f", flags, "-t", session), nil
+	branch := "attach-session -E -f " + flags + " -t '" + session + "'"
+	return append(args, "-L", socket, "if-shell", "-F", "-t", session+":", safeDetachFormat, branch), nil
 }
 
 func ParseTerminalPolicy(host, socket, session, epoch string, output []byte) (TerminalPolicy, error) {
 	var policy TerminalPolicy
 	if len(output) > MaxOutput {
 		return policy, ErrInvalid
+	}
+	output, safe := bytes.CutSuffix(output, []byte("off\noff\n"))
+	if !safe {
+		return policy, ErrTerminalDetachPolicy
 	}
 	lines := strings.Split(strings.TrimSuffix(string(output), "\n"), "\n")
 	if len(lines) < 5 || len(lines) > 1000 {

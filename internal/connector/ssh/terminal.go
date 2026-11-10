@@ -189,6 +189,9 @@ func (t *terminal) readPolicy(ctx context.Context) (tmux.TerminalPolicy, error) 
 		return tmux.TerminalPolicy{}, err
 	}
 	policy, err := tmux.ParseTerminalPolicy(t.host.ID, t.host.Socket, t.target, t.epoch, out)
+	if err == tmux.ErrTerminalDetachPolicy {
+		return policy, fail("terminal_detach_policy")
+	}
 	if err == tmux.ErrChanged {
 		return policy, fail("terminal_target_changed")
 	}

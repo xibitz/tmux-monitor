@@ -1,7 +1,7 @@
 # Operasi dan pemulihan tmux monitor
 
-Template dan alat pada dokumen ini belum dijalankan pada mesin uji. Gunakan
-profil dan direktori lab untuk kualifikasi sebelum deployment produksi.
+Arsip Darwin, lint plist, backup dan restore telah diuji secara lokal.
+Instalasi service pada mesin lab tetap diperlukan sebelum deployment produksi.
 
 ## Paket dan hub Linux
 
@@ -105,6 +105,10 @@ sudo python3 scripts/hub-backup.py backup \
   --secrets-recipient age1REPLACE_SECRET_RECIPIENT
 sudo systemctl start tmux-monitor-hub.service
 ```
+
+Untuk mengulang uji backup dan rollback pada fixture lokal, jalankan
+`bash scripts/qualify-backup.sh` dari source setelah `make build` dengan
+`age` dan `age-keygen` di PATH.
 
 Script memakai SQLite backup API agar snapshot mencakup transaksi yang sudah
 commit, termasuk WAL bila ada. Hasilnya `hub.sqlite.age` dan

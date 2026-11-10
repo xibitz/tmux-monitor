@@ -39,6 +39,11 @@ func terminalServer(t *testing.T, f *fixture, env []string) string {
 	attach, _ := tmux.AttachCommand(f.host.Socket, "$0")
 	interactiveAttach, _ := tmux.InteractiveAttachCommand(f.host.Socket, "$0")
 	clients, _ := tmux.ClientTargetsCommand(f.host.Socket)
+	watchArgs, _ := tmux.ControlArgs(f.host.Socket)
+	for i := range watchArgs {
+		watchArgs[i] = tmux.ShellQuote(watchArgs[i])
+	}
+	watch := "LC_ALL=C env -u TMUX -u TMUX_PANE " + strings.Join(watchArgs, " ")
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	connections := map[net.Conn]bool{}
@@ -117,6 +122,25 @@ func terminalServer(t *testing.T, f *fixture, env []string) string {
 									_ = request.Reply(true, nil)
 									_, _ = io.WriteString(channel, "tester\n")
 									_, _ = channel.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{0}))
+									return
+								}
+								if x.Command == "LC_ALL=C tmux -V" || x.Command == watch {
+									_ = request.Reply(true, nil)
+									ctx, stop := context.WithTimeout(context.Background(), 10*time.Second)
+									cmd := exec.CommandContext(ctx, "/bin/sh", "-c", "LC_ALL=C exec "+strings.TrimPrefix(x.Command, "LC_ALL=C "))
+									cmd.Env = env
+									if x.Command == watch {
+										cmd.Stdin = channel
+									}
+									cmd.Stdout, cmd.Stderr = channel, channel.Stderr()
+									cmd.WaitDelay = time.Second
+									err := cmd.Run()
+									stop()
+									status := uint32(0)
+									if err != nil {
+										status = 1
+									}
+									_, _ = channel.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{status}))
 									return
 								}
 								if x.Command != policy && x.Command != attach && x.Command != interactiveAttach && x.Command != clients {
@@ -289,6 +313,15 @@ func TestReadOnlyTerminalUsesRealSSHPTYAndPreservesSession(t *testing.T) {
 	if e := stream.Check(ctx); e != nil {
 		t.Fatal(e)
 	}
+	run("set-option", "-t", "$0", "destroy-unattached", "on")
+	if stream, err := m.OpenTerminal(ctx, f.host, f.record, "$0", inv.Epoch); Code(err) != "terminal_detach_policy" {
+		if stream != nil {
+			_ = stream.Close()
+		}
+		t.Fatalf("destructive detach policy accepted: %v", err)
+	}
+	run("has-session", "-t", "$0")
+	run("set-option", "-t", "$0", "destroy-unattached", "off")
 	run("set-option", "-w", "-t", "@1", "window-size", "latest")
 	if e := stream.Check(ctx); Code(e) != "terminal_size_policy" {
 		t.Fatalf("policy change accepted: %v", e)

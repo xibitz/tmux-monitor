@@ -13,7 +13,7 @@ The offline page does not use the dynamic, nonce-bearing application HTML.
 
 | Method and path | Authorization | Request / response |
 | --- | --- | --- |
-| `GET /healthz` | Local listener | `{"status":"ok","schemaVersion":8}` in current source (migration008 untested); 503 if storage is unavailable |
+| `GET /healthz` | Local listener | `{"status":"ok","schemaVersion":8}` in current source (migration008 verified locally); 503 if storage is unavailable |
 | `POST /api/v1/auth/login` | Exact configured Origin, rate limited | `{username,password}` → `{user,csrfToken}` and session cookie; generic 401 for invalid credentials |
 | `GET /api/v1/me` | Session | `{user:{id,username,isAdmin},csrfToken}` |
 | `POST /api/v1/auth/logout` | Session + CSRF | 204; revoke session and expire cookie |
@@ -541,7 +541,7 @@ Errors: 400 malformed JSON, 401 unauthenticated, 403 forbidden/CSRF/Origin,
 require login before returning JSON 404. Terminal upgrades follow the experimental
 contract above and are disabled unless explicitly enabled by the operator.
 
-### Inventory events and pane policy (T40–T42, partial)
+### Inventory events and pane policy (T40–T42)
 
 `GET /ws/v1/events?hostId=<host-id>` uses the app session cookie, exact browser
 Origin and current `tmux:read` access. It requires
@@ -560,7 +560,10 @@ a per-connection sequence. It carries no pane output. The existing Agent
 inventory RPC and periodic reconciliation still work with older Agents.
 `capabilities.controlMode` indicates eligibility to attempt control events.
 `capabilities.independentPane` remains false. No API exposes live pane bytes
-or sends resize/selection commands through the watcher.
+or sends resize/selection commands through the watcher. SSH and Agent PTY
+viewers and the control watcher require safe detach policy before attaching.
+The PTY reports `terminal_detach_policy` if `exit-unattached` or
+`destroy-unattached` prevents a safe attach.
 
 ### Coding events and notifications (T50–T52, partial)
 

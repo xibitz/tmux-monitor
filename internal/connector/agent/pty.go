@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -36,8 +35,6 @@ func openPTY(ctx, setup context.Context, host, socket, target, epoch string, int
 	if err != nil {
 		return nil, "terminal_target_changed"
 	}
-	policyArgs = append(policyArgs, ";", "show-options", "-sv", "exit-unattached",
-		";", "show-options", "-Av", "-t", target+":", "destroy-unattached")
 	clientArgs, err := tmux.ClientTargetsArgs(socket)
 	if err != nil {
 		return nil, "terminal_target_changed"
@@ -143,11 +140,10 @@ func (t *localPTY) readPolicy(ctx context.Context) (tmux.TerminalPolicy, string)
 	if status != "ok" {
 		return tmux.TerminalPolicy{}, status
 	}
-	out, safe := bytes.CutSuffix(out, []byte("off\noff\n"))
-	if !safe {
-		return tmux.TerminalPolicy{}, "terminal_detach_policy"
-	}
 	policy, err := tmux.ParseTerminalPolicy(t.host, t.socket, t.target, t.epoch, out)
+	if errors.Is(err, tmux.ErrTerminalDetachPolicy) {
+		return policy, "terminal_detach_policy"
+	}
 	if errors.Is(err, tmux.ErrChanged) {
 		return policy, "terminal_target_changed"
 	}

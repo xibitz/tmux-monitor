@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-const policyFixture = "F|123|1700000000|/tmp/fixture/default|3.8\nmanual\nT|$0|on|@0|120|39\nW|@0|manual|120|39\nW|@1|manual|90|30\nF|123|1700000000|/tmp/fixture/default|3.8\n"
+const policyFixture = "F|123|1700000000|/tmp/fixture/default|3.8\nmanual\nT|$0|on|@0|120|39\nW|@0|manual|120|39\nW|@1|manual|90|30\nF|123|1700000000|/tmp/fixture/default|3.8\noff\noff\n"
 
 func TestTerminalPolicyRequiresStableManualWindows(t *testing.T) {
 	for _, version := range []string{"3.4", "3.6", "3.6a", "3.6b"} {
@@ -44,7 +44,7 @@ func TestTerminalPolicyRequiresStableManualWindows(t *testing.T) {
 		}
 	}
 	command, _ := AttachCommand("default", "$0")
-	if !strings.Contains(command, "'read-only,ignore-size'") || strings.Contains(command, "-d") {
+	if !strings.Contains(command, "read-only,ignore-size") || strings.Contains(command, "-d") {
 		t.Fatal("unsafe attach catalog")
 	}
 	if _, err := TerminalPolicyCommand("bad socket", "$0"); err == nil {

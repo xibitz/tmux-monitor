@@ -116,9 +116,6 @@ func ControlArgs(socket string) ([]string, error) {
 	if !socketName.MatchString(socket) {
 		return nil, ErrInvalid
 	}
-	// A last-client detach could stop a server configured with exit-unattached.
-	// Evaluate this before attaching in the same server command queue.
-	const allow = "#{||:#{==:#{exit-unattached},0},#{==:#{exit-unattached},off}}"
 	const attach = "attach-session -E -f read-only,ignore-size,no-output"
-	return []string{"tmux", "-N", "-L", socket, "-C", "if-shell", "-F", allow, attach}, nil
+	return []string{"tmux", "-N", "-L", socket, "-C", "if-shell", "-F", safeDetachFormat, attach}, nil
 }

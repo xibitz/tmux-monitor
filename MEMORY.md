@@ -6,10 +6,10 @@ Dokumen ini menyimpan keadaan pekerjaan; spesifikasi produk tetap di
 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md), kontrak API aktual di
 [docs/api-v1.md](docs/api-v1.md).
 
-**Instruksi pengguna terbaru: lanjut development tanpa testing.** Pengujian
-otomatis/browser/CI ditunda sampai pengguna memberi arahan berbeda. Checkpoint
-create/kill dan snapshot pane di bawah hanya source + format/review; build/compile juga tidak
-dijalankan pada turn ini. Jangan memakai CI rename lama sebagai bukti kode baru.
+**Instruksi pengguna terbaru: build dan uji checkpoint yang belum diuji.**
+Pengujian lokal/CI diizinkan mulai dari baseline `e2ef6d8`. Gunakan lab
+terisolasi dan lanjut dari checkpoint kualifikasi terakhir bila jendela
+berganti. Hasil lama di bawah tetap merupakan catatan historis.
 
 ## Tujuan dan keadaan saat ini
 
@@ -29,33 +29,20 @@ Toolbar interactive kini memiliki modifier sekali pakai, kolom kombinasi dan
 prefix control-key yang dapat dipilih lokal; keyboard fisik tetap melalui xterm.
 Terminal browser terbaru memakai tmux.v2 dengan heartbeat dan lease15detik;
 offline/putus tidak mengaktifkan input ulang. Hub tetap menerima legacy tmux.v1.
-Rename session SSH/tmux3.8 eksperimental tersedia dengan flag mutasi terpisah,
-konfirmasi, guard identitas dan ledger idempotensi persisten. Source create/kill
-telah ditambahkan di belakang flag baru default-off; **belum diuji atau dikompilasi**.
-Migrasi005 juga belum diuji; database/runtime pengguna belum diupgrade.
-Source snapshot pane SSH read-only kini tersedia dengan flag terpisah default-off.
-Belum diuji; tidak ada perubahan schema untuk irisan ini.
-Source ubah nama window satu tautan dan buat window detached pada session di
-luar grup tersedia untuk SSH dengan flag default-off. Statusnya belum diuji.
-Source hapus window dan split/hapus pane SSH memakai flag layout terpisah,
-default-off. Semua operasi T21 tersedia melalui SSH di source. Paritas Agent
-menunggu T22–T24 dan gate pengujian tetap terbuka.
-Source T22 menambahkan pairing, revoke, CLI Agent dan inventaris read-only
-melalui WSS. Flag Agent default-off dan perlu Serve HTTPS. Schema006 belum diuji.
-Source T23 menambahkan PTY Agent read-only dan interaktif eksplisit dengan
-flag hub serta opt-in Agent. T23 belum diuji.
-Source T24 menambahkan heartbeat, reconnect otomatis, fence proses/generation,
-rekonsiliasi inventaris dan status Agent. T24 dan schema007 belum diuji.
-Source T30/T33/T34 menambahkan PWA dan shell offline, paket service dan
-backup/restore, serta matriks gangguan dan alat ukur kapasitas. Semua gate
-penerimaan untuk checkpoint tersebut masih terbuka.
+Mutasi session/window/pane SSH eksperimental memakai flag terpisah, guard
+epoch/revision, konfirmasi dan ledger idempotensi. Snapshot pane SSH tetap
+read-only. Agent menyediakan pairing, inventaris, PTY, heartbeat dan reconnect.
+Control mode menyediakan invalidasi inventaris untuk SSH/Agent, dengan
+snapshot penuh saat resync. Live pane independen tetap dinonaktifkan.
+PWA, tab, favorit, backup/restore, inbox dan hook opt-in tersedia. Hasil
+kualifikasi aktual dan gate yang tersisa ada di checkpoint terbaru di bawah.
 
 Baseline sebelum irisan T12: `33466f0` (SSH/inventaris); dokumentasi awal handoff:
 `b7b8c1c`. Sebelumnya `1d8c1cf` (UX allowlist), `5c99762` (fondasi), `a879f8c`
 (rancangan). Commit dokumentasi sesudah kode tidak mengubah implementasinya.
 
-**T00, T10, T11 DONE. T02/T03/T12/T13/T20/T21/T22/T23/T24/T30/T31/T32/T33/T34/T40/T41/T42/T50/T51/T52/T60 PARTIAL. Task lain TODO.
-Berikutnya paritas mutasi Agent T20/T21; gate testing T20–T24 dan perangkat tetap terbuka.**
+**T00, T10, T11, T40, T50 DONE. T02/T03/T12/T13/T20/T21/T22/T23/T24/T30/T31/T32/T33/T34/T41/T42/T51/T52/T60 PARTIAL. Task lain TODO.
+Lanjutkan dari checkpoint kualifikasi terbaru untuk perangkat, staging Serve/Grants dan benchmark.**
 DONE pada T10/T11 berarti acceptance kode/automated tests yang dicatat telah
 lulus, bukan bukti sshd/tailnet/HP pengguna sudah diuji. Konektor Agent memiliki source inventaris dan PTY; M1 dan gate rilis P0 belum selesai. Terminal memerlukan
 opt-in operator, bukan rilis P0 yang telah lulus gate.
@@ -905,27 +892,76 @@ migrasi, koneksi tmux, hook CLI, Web Push, benchmark atau CI. Commit memakai
    setelah baseline tercatat. Data, konfigurasi dan proses pengguna tidak
    disentuh.
 
+## Checkpoint build dan kualifikasi (10 November)
+
+Baseline source `e2ef6d8`. Instruksi tanpa testing telah diganti. Semua
+database, TLS, akun, key, sesi, socket tmux dan profil browser pengujian
+terisolasi. Runtime, data dan konfigurasi pribadi tetap di luar fixture.
+
+- `make build`, `make check`, `make test` (race detector Go dan 13 tes web),
+  `make package`, serta spike dua klien tmux lokal lulus.
+- Perbaikan build: pakai satu validator epoch di protokol Agent dan hapus
+  impor Go yang tidak dipakai. Guard attach SSH/Agent dan watcher sekarang
+  menolak kebijakan tmux yang dapat mengakhiri session/server saat detach.
+  Uji SSH memastikan `destroy-unattached` ditolak tanpa mengambil alih
+  klien yang sudah terhubung.
+- T20/T21: lifecycle SSH terhadap tmux 3.8 nyata pada socket sementara,
+  snapshot pane, create/rename/kill window, split/kill pane, dan stale create
+  lulus. Fixture HTTP membuktikan opt-in, izin write/kill terpisah, konfirmasi,
+  serta replay operasi setelah instance hub dibangun ulang.
+- T22–T24/T41: Agent dan hub sungguhan melalui TLS loopback dengan header
+  Serve sintetis. Pairing sekali pakai, perubahan window eksternal, PTY
+  read-only/interaktif dan input, heartbeat dan putus lease tanpa heartbeat meski RPC snapshot dijawab,
+  reconnect/stale/generation, proses ganda dan revoke lulus. SSH watcher juga menerima perubahan
+  eksternal dan mempertahankan dimensi tmux.
+- T40: fixture parser lulus. `go test ./internal/tmux -run '^$' -fuzz
+  '^FuzzReadControl$' -fuzztime 45s -parallel 2` menyelesaikan 46.403 eksekusi.
+  Fuzz inventaris terpisah selesai 287.054 eksekusi.
+- T30/T42/T52/T60: Chromium headless 156, viewport 393×852, memeriksa
+  manifest, shell offline, 7 entri cache publik, fullscreen fallback, gap
+  sequence, alasan live pane nonaktif, favorit, pencarian dan empat tab.
+  30 perpindahan tab pada fixture memberi P95 awal 66 ms. Web Push ditolak
+  secara sintetis dan inbox tetap terlihat. Reproduksi di
+  `scripts/qualify-browser.sh` dengan Playwright dan Chromium.
+- T33: `make package` Darwin arm64, lint plist dan `scripts/qualify-backup.sh`
+  lulus pada age 1.3.2. Backup dan restore mencakup SQLite dan key SSH asli
+  fixture, mode 0700/0600, penolakan identitas salah/pasangan artefak berbeda,
+  proteksi overwrite dan downgrade/upgrade schema 008→007→008. Binary hub
+  dan Agent Linux amd64 berhasil di-cross-build statis.
+- T34: alat ukur menghasilkan 20/20 putaran lengkap dan 200/200 permintaan
+  inventaris pada fixture HTTP sintetis 5 profil SSH + 5 profil Agent × 5
+  session. Pada skenario stale, 2 stale dilaporkan dan dua putaran tidak
+  dihitung lengkap. Angka timing fixture bukan performa deployment.
+- T50–T52: payload hook sintetis melewati socket lokal dan WSS, kemudian
+  inbox menerima dedupe, lokasi terverifikasi atau unknown. Fixture database
+  membuktikan retensi 200/host dan menolak generation lama. Transport push
+  simulasi membuktikan ACL, signature VAPID, body kosong, cooldown dan
+  penghapusan langganan yang berakhir. Provider publik belum dipakai.
+
+Titik lanjut bila jendela berganti: jalankan ulang fixture yang belum
+diverifikasi terhadap commit terkini dan cek hasil GitHub Actions. Gate
+tersisa membutuhkan staging Serve/Grants dengan host khusus, Android dan
+iOS fisik, CLI Codex/Claude nyata dengan profil uji, provider push publik,
+clean install service Linux/macOS dan benchmark RAM/CPU/bandwidth saat
+burst. Mutasi Agent T20/T21 serta live pane independen tetap di luar cakupan
+uji karena fiturnya belum tersedia.
+
 ## Titik lanjut tepat
 
-1. Baca hasil CI/commit checkpoint interactive terbaru. Cek git status dan
-   perubahan pengguna. `.env` dan runtime pengguna tidak diubah/restart.
-2. Lengkapi negative access Serve/Grants dan device matrix T01/T03. Minimum
-   tmux3.7 tetap wajib; default manual pada tmux3.6a bisa crash. Jangan merendahkan
-   gate minimum untuk membuat terminal bekerja di host lama; lihat ADR0001.
-3. T31: uji keyboard fisik/IME Android+iOS, clipboard sensitif dan aksesibilitas
-   screen-reader/fokus pada perangkat nyata. Modifier/prefix dan matriks byte
-   sudah tersedia; bukan klaim T31 DONE. Input membagi session dengan desktop.
-4. T13: uji real network switch/sleep/restart proses hub dan error taxonomy final;
-   mode activation/reopen harus tetap readonly dan tanpa replay. Input yang
-   sudah in-flight pada waktu revoke/disconnect mungkin sudah diproses remote;
-   jangan menjanjikan undo/zero input secara retroaktif.
-5. T20: source create/kill sekarang tersedia tetapi belum diuji. Tetap ikuti
-   instruksi no-testing pengguna. Kualifikasi checklist di atas hanya bila
-   pengguna mengizinkan testing kembali; jangan menandai selesai dari review
-   source. Seluruh operasi T21 SSH sudah ditulis. Untuk paritas T21, gunakan kembali kontrak dan katalog
-   operasi untuk transport Agent. Tidak ada raw-shell/
-   kill-server API; ledger pending harus tetap retained setelah restart.
-6. Ikuti aturan implementasi di atas; perbarui memory/tasklist/CI dan push SSH.
+1. Periksa status CI dan tabel task sebelum mengulang pengujian. Untuk lokal,
+   jalankan `make build`, `make check`, dan `make test`. Suite Go membuka
+   loopback dan socket tmux yang dibuat fixture.
+2. Siapkan lab Serve/Grants terpisah, HP Android/iOS, dan host SSH/Agent nyata.
+   Ulang skenario T01–T03, T12/T13, T20–T24, T30–T34 dan T41–T42 yang masih
+   terbuka. Uji keyboard/IME dan pembaca layar T31 pada perangkat fisik.
+3. Jalankan hook dari CLI Codex/Claude asli serta Web Push dari provider yang
+   tersedia di lab. Benchmark 10 host/50 session termasuk burst dan ukur
+   CPU/RAM/bandwidth menurut `docs/release-qualification.md`.
+4. Paritas mutasi Agent dan live pane independen membutuhkan implementasi
+   terpisah sebelum diuji. Pertahankan guard tmux 3.7+, epoch, revoke,
+   no-replay, dan pembatasan payload.
+5. Perbarui memory dan tasklist dengan bukti tiap lingkungan. Jangan
+   menandai rilis P0/P1 siap sebelum gate terkait terpenuhi.
 
 Catatan onboarding: target-host.pub harus disediakan operator; bukan dibuat oleh
 ssh-keygen -lf. Endpoint Tailscale SSH bisa menyajikan key lain dari OpenSSH
@@ -938,8 +974,8 @@ hostname atau fingerprint pribadi pengguna yang dicatat dalam repositori.
 Backend pengguna tidak direstart atau dimigrasi oleh agent pada pekerjaan ini.
 Untuk memakai source terbaru: hentikan backend lama, backup data penting, muat
 .env di terminal backend, lalu jalankan kembali `make dev` (atau build/binary
-baru). Source startup kini menuju migrasi008 (BELUM DIUJI); jangan menyamakan
-dengan baseline binary/CI schema004. CLI SSH harus memakai TMUX_MONITOR_DATA_DIR
+baru). Source startup menuju migrasi008. Jalur rollback/reapply telah diuji pada
+database fixture. Data pengguna belum dimigrasi. CLI SSH harus memakai TMUX_MONITOR_DATA_DIR
 yang sama. Frontend Vite tetap
 pada 5173; backend 8080 untuk konfigurasi dev yang sekarang didokumentasikan.
 

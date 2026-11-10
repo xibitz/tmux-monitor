@@ -21,23 +21,23 @@ pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus
 | T11 | DONE | Parser/epoch/revision, SSH snapshot, cache stale/revoke dan UI; uji tmux nyata terisolasi di macOS serta CI Linux lulus (empty/rename/split/kill/restart). |
 | T12 | PARTIAL | Terminal eksperimental: default read-only, aktivasi interactive dengan izin/tiket baru, input bersequence/rate limit, PTY raw, Unicode/control dan revoke/no-replay tests. Gate perangkat/akses nyata masih terbuka. |
 | T13 | PARTIAL | Heartbeat v2 + ping/pong, deadline browser/input, offline/pagehide, mode-response fence dan reopen read-only tanpa replay tersedia. Uji idle/timeout/sequence/restart hub terisolasi dan browser fixture lulus. Network switch/sleep/perangkat nyata tetap terbuka. |
-| T20 | PARTIAL | Rename baseline99c0791 teruji. Source create/kill + createRevision/guard subtree, konfirmasi ID, izin kill, flag lifecycle default-off dan migrasi005 ditambahkan **BELUM DIUJI** atas permintaan pengguna. Agent parity belum. |
-| T21 | PARTIAL | Seluruh operasi SSH tersedia di source **BELUM DIUJI**. Mencakup snapshot pane, create/rename/kill window, split/kill pane, dan label dampak bersama. Paritas Agent menunggu T22–T24. |
-| T22 | PARTIAL | Source pairing token sekali pakai, revoke, CLI, WSS version/generation, RPC inventaris read-only dan UI tersedia **BELUM DIUJI**. Gate token reuse, revoke, Serve/TLS dan generation tetap terbuka. |
-| T23 | PARTIAL | Source PTY Agent read-only/interaktif, tiket dan framing browser bersama, serta pelepasan terkonfirmasi tersedia **BELUM DIUJI**. Suite T12 belum dijalankan pada Agent. |
-| T24 | PARTIAL | Source heartbeat v2, expiry, reconnect berjeda, fence instance/generation, refresh capability/inventaris dan status UI tersedia **BELUM DIUJI**. Gate sleep/wake dan koneksi ganda tetap terbuka. |
-| T30 | PARTIAL | Manifest, ikon, shell offline statis, cache aset publik, safe-area dan fullscreen/fallback tersedia **BELUM DIUJI**. Gate Android/iOS dan inspeksi cache tetap terbuka. |
+| T20 | PARTIAL | Create/kill session lulus di SSH tmux 3.8 lokal. Flag, izin, konfirmasi dan replay persisten diuji. Paritas mutasi Agent dan host nyata terbuka. |
+| T21 | PARTIAL | Snapshot pane, create/rename/kill window dan split/kill pane lulus di SSH tmux 3.8 lokal. Paritas mutasi Agent dan host nyata terbuka. |
+| T22 | PARTIAL | Pairing, penolakan replay token, inventaris WSS TLS lokal dan revoke lulus. Serve/Grants dan penempatan Agent nyata terbuka. |
+| T23 | PARTIAL | PTY read-only, aktivasi interaktif dan kirim input melalui Agent WSS dan tmux lokal lulus. Matriks perangkat/transport nyata terbuka. |
+| T24 | PARTIAL | Heartbeat/reconnect generation, proses ganda, inventaris stale dan revoke lulus di fixture. Sleep/wake serta jalur Tailscale nyata terbuka. |
+| T30 | PARTIAL | Manifest, service worker HTTPS, shell offline, cache aset publik dan fullscreen fallback lulus di Chromium viewport HP. Instalasi Android/iOS nyata terbuka. |
 | T31 | PARTIAL | Tombol sentuh, Ctrl/Alt/Shift sekali pakai, kolom kombinasi, prefix control-key lokal dan konfirmasi paste multiline tersedia. Matriks byte otomatis tersedia; aksesibilitas dan keyboard/IME HP nyata belum tuntas. |
 | T32 | PARTIAL | Audit dasar dan redaction tests tersedia; filter/retensi/security review/fuzz belum. |
-| T33 | PARTIAL | Paket binary, template service, backup/restore terenkripsi dan runbook tersedia **BELUM DIUJI**. Clean install dan restore lab belum dijalankan. |
-| T34 | PARTIAL | Matriks gangguan dan alat pengukuran read-only tersedia **BELUM DIJALANKAN**. Kapasitas dan gate P0 belum dibuktikan. |
-| T40 | PARTIAL | Parser control mode, fixture interleaving/escaping/truncation dan fuzz tersedia di source **BELUM DIJALANKAN**. |
-| T41 | PARTIAL | SSH + Agent mengirim invalidation, sequence dan resync snapshot. UI memiliki fallback polling. **BELUM DIUJI**. |
-| T42 | PARTIAL | Live pane tetap nonaktif dengan alasan di UI. Snapshot SSH dan viewer read-only yang sudah ada tetap tersedia. Isolasi dua klien belum dibuktikan. |
-| T50 | PARTIAL | Schema008, inbox berizin, dedupe, retensi dan atribusi lokasi dengan fallback unknown tersedia **BELUM DIUJI**. |
-| T51 | PARTIAL | Adaptor v1 opt-in Codex/Claude, socket lokal privat dan forwarding lewat Agent berpasangan tersedia **BELUM DIUJI**. |
-| T52 | PARTIAL | Inbox in-app dan Web Push opt-in dengan pesan umum, dukungan browser dan fallback inbox tersedia **BELUM DIUJI**. |
-| T60 | PARTIAL | Empat tab per detail host, favorit dan pencarian tersedia **BELUM DIUJI**. Benchmark dan tuning terukur masih terbuka. |
+| T33 | PARTIAL | Paket Darwin, lint plist, backup/restore SQLite+key dengan age dan rollback 008→007→008 lulus. Clean install systemd/launchd nyata terbuka. |
+| T34 | PARTIAL | Alat ukur lulus pada fixture HTTP 10 host/50 session dan status stale. Beberapa skenario gangguan lulus pada tmux lokal. Matriks dan kapasitas nyata terbuka. |
+| T40 | DONE | Fixture pemisahan blok, escaping/truncation, fuzz control mode, serta watcher pada tmux 3.8 lokal lulus. |
+| T41 | PARTIAL | Watcher SSH dan Agent tmux lokal, snapshot baru dan resync gap browser lulus. Matriks tmux dan tailnet nyata terbuka. |
+| T42 | PARTIAL | Pesan fallback live pane dan pengamanan detach lulus di Chromium/SSH fixture. Streaming pane independen tetap nonaktif. |
+| T50 | DONE | Schema008, ACL, atribusi terverifikasi/fallback unknown, dedupe, retensi 200/host dan fence generation lulus di fixture. |
+| T51 | PARTIAL | Payload Codex dan Claude sintetis lulus melalui socket lokal, Agent WSS dan inbox. Eksekusi dari CLI nyata belum dikualifikasi. |
+| T52 | PARTIAL | Inbox tetap tersedia saat izin push ditolak di Chromium. Tes HTTP memeriksa ACL, VAPID, body kosong, cooldown dan endpoint kedaluwarsa. Pengiriman provider nyata terbuka. |
+| T60 | PARTIAL | Empat tab, kembali read-only, pencarian dan favorit lulus pada Chromium fixture. P95 30 perpindahan tercatat; RAM/CPU/bandwidth nyata dan tuning terbuka. |
 
 ### Checklist irisan T10–T11
 
@@ -379,13 +379,13 @@ Setiap task menghasilkan kode, dokumentasi singkat, dan bukti gate yang relevan.
 
 ### M4 — Event bridge dan pane independen (P1; setelah T02, T24, T34)
 
-- [ ] **T40** Parser control mode sebagai state machine dengan fixture dan fuzz untuk interleaving, escaping, `%error`, output parsial. **Selesai:** tidak ada desinkronisasi pada fixture/generasi acak.
+- [x] **T40** Parser control mode sebagai state machine dengan fixture dan fuzz untuk interleaving, escaping, `%error`, output parsial. **Selesai:** tidak ada desinkronisasi pada fixture/generasi acak.
 - [ ] **T41** Adapter event SSH dan Agent, sequence, resume/resync, polling fallback. **Selesai:** perubahan eksternal muncul di UI dan gap memicu snapshot ulang.
 - [ ] **T42** Live pane spesifik, selection per viewer dan kebijakan resize berdasar capability; uji dua klien. **Selesai:** desktop tidak berubah saat HP hanya menjelajah, atau fitur dinonaktifkan dengan alasan yang jelas.
 
 ### M5 — Notifikasi coding agent (P1; setelah T24, T41)
 
-- [ ] **T50** Skema event internal, mapping host/session/pane, dedupe, confidence, inbox. **Selesai:** event tak terpetakan tampil sebagai unknown, bukan atribusi palsu.
+- [x] **T50** Skema event internal, mapping host/session/pane, dedupe, confidence, inbox. **Selesai:** event tak terpetakan tampil sebagai unknown, bukan atribusi palsu.
 - [ ] **T51** Pengirim lokal opt-in untuk Codex `notify` dan Claude Code hooks; parser/adapter berversi, autentikasi ke Agent, penghapusan teks sensitif. **Selesai:** completion/attention/error pada versi CLI uji menghasilkan event yang tepat. [OpenAI Docs: configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference), [Claude Code hooks](https://code.claude.com/docs/en/hooks).
 - [ ] **T52** Notifikasi in-app; Web Push opt-in dengan payload umum dan feature detection. **Selesai:** izin ditolak/unsupported tetap memberi inbox; payload tidak memuat terminal text. [WebKit Web Push](https://webkit.org/blog/13878/).
 
