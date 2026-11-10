@@ -25,14 +25,14 @@ berada di [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 Agent adalah binary Go yang berjalan di mesin tmux sebagai akun pemilik
 session. Ia membuka koneksi keluar ke hub melalui HTTPS Tailscale Serve.
 T22 mencakup pairing, cabut akses, dan inventaris read-only. Terminal Agent
-memiliki opt-in terpisah. Mutasi tmux, heartbeat Agent, dan reconnect otomatis
-masih dijadwalkan.
+memiliki opt-in terpisah. T24 menambahkan heartbeat dan reconnect otomatis.
+Mutasi tmux melalui Agent masih dijadwalkan.
 
 1. Jalankan hub dalam mode produksi HTTPS dengan Tailscale Serve yang meneruskan
    ke listener localhost. Batasi akses dari mesin Agent melalui Tailscale Grants.
    Aktifkan `TMUX_MONITOR_AGENT_ENABLED=true` dan `TMUX_MONITOR_DEV=false`.
    Gunakan origin HTTPS dengan hostname Serve `.ts.net` dan jalankan hub dari
-   source terbaru. Backup SQLite sebelum naik ke schema006.
+   source terbaru. Backup SQLite sebelum naik ke schema007.
 2. Build binary Agent untuk Linux atau macOS target dengan
    `go build -trimpath -o bin/agent ./cmd/agent`. Binary juga dihasilkan
    oleh `make build`.
@@ -53,11 +53,18 @@ masih dijadwalkan.
    ./bin/agent run --credential-file "$HOME/.config/tmux-monitor/agent.json"
    ```
 
-5. Dari detail host, klik **Periksa koneksi dan inventaris**. Saat Agent terputus,
-   jalankan ulang `agent run`. Untuk rotasi credential atau pindah IP, klik
-   **Cabut identitas…** dan ulangi pairing dengan path file credential baru.
+5. Setelah Agent terhubung, hub menyegarkan inventaris secara otomatis. Klik
+   **Periksa koneksi dan inventaris** untuk memuat daftar session pada detail host.
+   Untuk rotasi credential atau pindah IP, klik **Cabut identitas…** dan ulangi
+   pairing dengan path file credential baru.
 
-T22 belum diuji. Hub memerlukan Serve yang mengganti header sumber, host dan
+Upgrade hub terlebih dahulu sebelum mengganti binary Agent. Agent v2 mencoba
+reconnect otomatis dengan jeda bertahap. Setelah tiga interval tanpa heartbeat,
+hub menandai Agent tidak terjangkau. Interval default 15 detik dan bisa diatur
+ke 5–60 detik lewat `TMUX_MONITOR_AGENT_HEARTBEAT_SECONDS`. Proses Agent kedua
+berhenti bila profil yang sama masih dimiliki koneksi sehat.
+
+T22–T24 belum diuji. Hub memerlukan Serve yang mengganti header sumber, host dan
 protokol untuk permintaan Tailnet. [Source Tailscale Serve](https://github.com/tailscale/tailscale/blob/main/ipn/ipnlocal/serve.go)
 
 ## Membuka terminal Agent

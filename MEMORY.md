@@ -19,7 +19,7 @@ Pengguna meminta development diteruskan dan status ditulis agar agent baru bisa
 melanjutkan tanpa mengandalkan riwayat chat. **Memory ini wajib diperbarui setelah
 checkpoint, sebelum berhenti, dan sebelum context/token habis.**
 
-Yang sudah tersedia: hub localhost-only, SQLite WAL/migrasi source001–006, bootstrap
+Yang sudah tersedia: hub localhost-only, SQLite WAL/migrasi source001–007, bootstrap
 admin, Argon2id/cookie sesi, ACL/CSRF/Origin, profil host, audit, UI responsif,
 allowlist SSH, Makefile/CI, **key store + CLI SSH configure/revoke, public host
 key pinning, probe dan inventaris tmux dengan epoch/revision serta cache stale**,
@@ -44,13 +44,15 @@ Source T22 menambahkan pairing, revoke, CLI Agent dan inventaris read-only
 melalui WSS. Flag Agent default-off dan perlu Serve HTTPS. Schema006 belum diuji.
 Source T23 menambahkan PTY Agent read-only dan interaktif eksplisit dengan
 flag hub serta opt-in Agent. T23 belum diuji.
+Source T24 menambahkan heartbeat, reconnect otomatis, fence proses/generation,
+rekonsiliasi inventaris dan status Agent. T24 dan schema007 belum diuji.
 
 Baseline sebelum irisan T12: `33466f0` (SSH/inventaris); dokumentasi awal handoff:
 `b7b8c1c`. Sebelumnya `1d8c1cf` (UX allowlist), `5c99762` (fondasi), `a879f8c`
 (rancangan). Commit dokumentasi sesudah kode tidak mengubah implementasinya.
 
-**T00, T10, T11 DONE. T02/T03/T12/T13/T20/T21/T22/T23/T31/T32 PARTIAL. Task lain TODO.
-Berikutnya lifecycle Agent T24; gate testing T20–T23 dan perangkat tetap terbuka.**
+**T00, T10, T11 DONE. T02/T03/T12/T13/T20/T21/T22/T23/T24/T31/T32 PARTIAL. Task lain TODO.
+Berikutnya paritas mutasi Agent T20/T21; gate testing T20–T24 dan perangkat tetap terbuka.**
 DONE pada T10/T11 berarti acceptance kode/automated tests yang dicatat telah
 lulus, bukan bukti sshd/tailnet/HP pengguna sudah diuji. Konektor Agent memiliki source inventaris dan PTY; M1 dan gate rilis P0 belum selesai. Terminal memerlukan
 opt-in operator, bukan rilis P0 yang telah lulus gate.
@@ -771,7 +773,7 @@ saja. Tidak ada test/build/compile/browser/CI dan commit memakai `[skip ci]`.
 
 ## Checkpoint T23 terminal Agent (10 November)
 
-Baseline `e89126c`. Status **BELUM DIUJI**. Hanya source, formatting dan review
+Baseline `e89126c`, commit source `2facade`. Status **BELUM DIUJI**. Hanya source, formatting dan review
 diff. Commit/push memakai `[skip ci]`. Tidak ada perubahan schema.
 
 1. Browser memakai tiket, ACL, audit, dan framing `tmux.v1`/`tmux.v2` yang sama.
@@ -796,6 +798,35 @@ diff. Commit/push memakai `[skip ci]`. Tidak ada perubahan schema.
    input/control keys, ack ambigu, backlog, serta UI. Jangan tandai T23
    selesai sebelum suite T12 pada Agent diizinkan dan lulus.
 
+## Checkpoint T24 lifecycle Agent (10 November)
+
+Baseline `2facade`. Status **BELUM DIUJI**. Hanya source, formatting dan review
+diff. Commit/push memakai `[skip ci]`.
+
+1. `tmux-agent.v2` menambahkan `instanceId`, `previousGeneration`, dan interval
+   heartbeat pada ACK. Agent lama masih diterima lewat v1 dan dipantau dengan
+   ping/pong. Upgrade hub dulu sebelum Agent v2. Schema007 menyimpan instance
+   terakhir tanpa menambah secret atau menyimpan heartbeat sebagai status live.
+2. Agent v2 mengirim heartbeat bersequence dan versi tmux. Hub mengakui
+   sequence. Default 15 detik, konfigurabel 5–60, lease tiga interval.
+   Reconnect mengautentikasi ulang dengan backoff eksponensial dan jitter.
+   Credential/IP yang ditolak atau instance usang menghentikan retry.
+3. Proses yang sama mengganti socket sebelumnya dengan generation baru.
+   Proses kedua tidak mengambil alih koneksi v2 yang sehat. Fence schema007
+   mengizinkan proses yang sama pulih dari ACK hilang dan menolak generation
+   lama setelah proses berbeda memperoleh profil.
+4. Hub mengambil snapshot penuh setelah handshake, saat versi berubah, dan
+   secara berkala. Cache lama hanya tersedia sebagai stale. Simpan hasil
+   hanya jika identitas/generation masih aktif. UI menampilkan heartbeat,
+   status `RECONNECTING`, dan stale saat inventaris berasal dari generation
+   berbeda. Refresh daftar host di UI tidak melakukan probe SSH.
+5. Tiket terminal Agent memerlukan inventaris fresh dari generation saat ini.
+   Koneksi putus, revoke atau pergantian generation tidak memulihkan viewer
+   atau mengulang input. Buka ulang tetap read-only secara eksplisit.
+6. Kualifikasi tertunda meliputi compile, migrasi007, heartbeat lease,
+   sleep/wake, koneksi ganda/ACK hilang, stale cache, revoke, PTY dan UI.
+   Mutasi Agent untuk T20/T21 masih perlu implementasi.
+
 ## Titik lanjut tepat
 
 1. Baca hasil CI/commit checkpoint interactive terbaru. Cek git status dan
@@ -813,8 +844,7 @@ diff. Commit/push memakai `[skip ci]`. Tidak ada perubahan schema.
 5. T20: source create/kill sekarang tersedia tetapi belum diuji. Tetap ikuti
    instruksi no-testing pengguna. Kualifikasi checklist di atas hanya bila
    pengguna mengizinkan testing kembali; jangan menandai selesai dari review
-   source. Seluruh operasi T21 SSH sudah ditulis. Untuk paritas T21, lanjutkan
-   fondasi konektor Agent di T24, lalu gunakan kembali kontrak dan katalog
+   source. Seluruh operasi T21 SSH sudah ditulis. Untuk paritas T21, gunakan kembali kontrak dan katalog
    operasi untuk transport Agent. Tidak ada raw-shell/
    kill-server API; ledger pending harus tetap retained setelah restart.
 6. Ikuti aturan implementasi di atas; perbarui memory/tasklist/CI dan push SSH.
@@ -830,7 +860,7 @@ hostname atau fingerprint pribadi pengguna yang dicatat dalam repositori.
 Backend pengguna tidak direstart atau dimigrasi oleh agent pada pekerjaan ini.
 Untuk memakai source terbaru: hentikan backend lama, backup data penting, muat
 .env di terminal backend, lalu jalankan kembali `make dev` (atau build/binary
-baru). Source startup kini menuju migrasi006 (BELUM DIUJI); jangan menyamakan
+baru). Source startup kini menuju migrasi007 (BELUM DIUJI); jangan menyamakan
 dengan baseline binary/CI schema004. CLI SSH harus memakai TMUX_MONITOR_DATA_DIR
 yang sama. Frontend Vite tetap
 pada 5173; backend 8080 untuk konfigurasi dev yang sekarang didokumentasikan.

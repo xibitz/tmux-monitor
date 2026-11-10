@@ -9,7 +9,7 @@ All timestamps use RFC 3339 UTC. All responses under `/api` and `/ws` use
 
 | Method and path | Authorization | Request / response |
 | --- | --- | --- |
-| `GET /healthz` | Local listener | `{"status":"ok","schemaVersion":6}` in current source (migration006 untested); 503 if storage is unavailable |
+| `GET /healthz` | Local listener | `{"status":"ok","schemaVersion":7}` in current source (migration007 untested); 503 if storage is unavailable |
 | `POST /api/v1/auth/login` | Exact configured Origin, rate limited | `{username,password}` → `{user,csrfToken}` and session cookie; generic 401 for invalid credentials |
 | `GET /api/v1/me` | Session | `{user:{id,username,isAdmin},csrfToken}` |
 | `POST /api/v1/auth/logout` | Session + CSRF | 204; revoke session and expire cookie |
@@ -38,9 +38,11 @@ administrator allowlist. Agent addresses must be empty. User and socket names us
 This endpoint does not accept credentials. It does not enroll an agent.
 
 `Host` adds `id`, `state`, `statusReason`, `stale`, `createdAt`, `updatedAt`,
-and nullable `observedAt`. State is the last explicit observation, not a live
-transport guarantee. New profiles have no observation. An Agent profile starts
-as `agent_offline`; SSH needs local credentials. Old observations are marked stale.
+and nullable `observedAt`. SSH state reflects the last explicit observation.
+Agent state combines a live connection and the current generation's inventory
+observation. Agent hosts may also include `agentLastHeartbeat` and `agentGeneration`.
+Agent inventory responses identify the generation that produced the snapshot.
+Old observations are marked stale.
 Unreachable state never implies that a tmux process has stopped.
 
 ## Experimental Agent pairing and inventory (T22, source only)
@@ -57,7 +59,7 @@ processes and must only be exposed by the trusted Serve proxy.
 | `POST /api/v1/agents/enrollments` | Admin, exact Origin, CSRF | `{hostId,tailnetIp}` → 201 `{token,expiresAt}`. Expires in 10 minutes and replaces any pending token for that profile. An active identity must be revoked before re-pairing. |
 | `POST /api/v1/agents/enroll` | Enrollment bearer token, bound Tailnet IP | `{hostId,osUser,socket}` → 201 `{agentId,credential}`. Atomically consumes the token. Invalid, expired and reused tokens return 401. |
 | `POST /api/v1/agents/{agentId}/revoke` | Admin, exact Origin, CSRF | 204. Revokes credential, invalidates cache and closes the matching active connection. |
-| `GET /ws/v1/agent` | Agent bearer credential, bound Tailnet IP | WebSocket subprotocol `tmux-agent.v1`. No browser Origin or cookie on machine requests. |
+| `GET /ws/v1/agent` | Agent bearer credential, bound Tailnet IP | WebSocket subprotocol `tmux-agent.v2` or legacy `tmux-agent.v1`. No browser Origin or cookie on machine requests. |
 
 Migration006 stores only hashed enrollment and connection secrets. Credential
 rotation is revoke followed by fresh enrollment. The Agent CLI stores the issued
@@ -74,8 +76,34 @@ generation and deadline, and its correlated result contains bounded tmux
 inventory records. The hub parses those records with the shared inventory
 parser. The limits are eight concurrent handshakes, 32 active Agents, four
 concurrent snapshot calls globally and one per Agent. Agent never opens an
-inbound listener. Host status reflects the last explicit probe. Management
-mutations, heartbeat and automatic reconnect are scheduled for later slices.
+inbound listener. Management mutations through Agent remain scheduled separately.
+
+## Experimental Agent lifecycle (T24, source only)
+
+Upgrade the hub before the Agent. The current Agent uses `tmux-agent.v2`;
+legacy Agent binaries can still negotiate v1. A v2 `hello` adds a process
+`instanceId` and the last acknowledged `previousGeneration` (zero on first
+connection). The hub acknowledges with `generation` and `heartbeatSeconds`.
+The hub persists the instance fence in schema007. The same process can
+replace its previous connection, including after a lost acknowledgement.
+A different process cannot displace a healthy v2 connection. Duplicate or
+obsolete instances receive close code 4001 and stop retrying.
+
+V2 sends `heartbeat` with `agentId`, `generation`, increasing `sequence` and
+`tmuxVersion`. The hub echoes the sequence in `heartbeat.ack`. Both ends
+expire the connection after three intervals without a valid heartbeat or
+acknowledgement. `TMUX_MONITOR_AGENT_HEARTBEAT_SECONDS` defaults to 15 and
+accepts 5–60. Legacy peers use WebSocket ping and pong. Reconnect authenticates
+again, uses exponential backoff with jitter, and stops on rejected credentials.
+
+The hub requests a full snapshot after handshake and every 20 seconds after
+reconciliation while connected. A changed reported tmux version invalidates freshness and requests
+another snapshot. `RECONNECTING` means the generation is being reconciled,
+`DEGRADED` means its latest snapshot failed, and `UNREACHABLE` means there is
+no live control connection. Only the current authenticated generation may
+update the cache. Older snapshots can be returned as stale and cannot enable a
+viewer. A new generation never restores a PTY or replays input. Browser
+reopening still requires a new read-only ticket. Build and tests are pending.
 
 ## Experimental Agent terminal (T23, source only)
 

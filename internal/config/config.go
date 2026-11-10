@@ -7,6 +7,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/xibitz/tmux-monitor/internal/agentproto"
 )
 
 type Config struct {
@@ -15,6 +17,7 @@ type Config struct {
 	Origin                  string
 	Development             bool
 	AgentEnabled            bool
+	AgentHeartbeatSeconds   int
 	AgentTerminalEnabled    bool
 	TerminalEnabled         bool
 	PaneSnapshotEnabled     bool
@@ -35,6 +38,10 @@ func Load() (Config, error) {
 	c.AgentEnabled, err = strconv.ParseBool(env("TMUX_MONITOR_AGENT_ENABLED", "false"))
 	if err != nil {
 		return c, fmt.Errorf("TMUX_MONITOR_AGENT_ENABLED must be true or false")
+	}
+	c.AgentHeartbeatSeconds, err = strconv.Atoi(env("TMUX_MONITOR_AGENT_HEARTBEAT_SECONDS", strconv.Itoa(agentproto.DefaultHeartbeatSeconds)))
+	if _, ok := agentproto.HeartbeatInterval(c.AgentHeartbeatSeconds); err != nil || !ok {
+		return c, fmt.Errorf("TMUX_MONITOR_AGENT_HEARTBEAT_SECONDS must be between %d and %d", agentproto.MinHeartbeatSeconds, agentproto.MaxHeartbeatSeconds)
 	}
 	c.AgentTerminalEnabled, err = strconv.ParseBool(env("TMUX_MONITOR_AGENT_TERMINAL_ENABLED", "false"))
 	if err != nil {

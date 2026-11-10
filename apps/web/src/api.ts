@@ -14,6 +14,8 @@ export type Host = HostInput & {
   state: string;
   statusReason: string;
   observedAt: string | null;
+  agentLastHeartbeat?: string;
+  agentGeneration?: number;
   createdAt: string;
   updatedAt: string;
   stale: boolean;
@@ -26,6 +28,7 @@ export type SSHMetadata = {
 };
 export type Inventory = {
   hostId: string;
+  agentGeneration?: number;
   socketId: string;
   transport: string;
   state: string;

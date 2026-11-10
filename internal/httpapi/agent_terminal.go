@@ -56,7 +56,7 @@ func (s *Server) agentTerminalUpgrade(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := s.agents.peer(hostID)
-	if p == nil || p.id != id || p.generation != generation || p.ctx.Err() != nil || !p.terminal {
+	if p == nil || p.id != id || p.generation != generation || !p.terminalReady("") {
 		s.fail(w, r, 403, "forbidden", "Koneksi Agent tidak lagi berlaku.")
 		return
 	}
@@ -91,7 +91,7 @@ func (s *Server) agentTerminalUpgrade(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *agentPeer) openTerminal(ctx context.Context, t terminalTicket) (*agentTerminalStream, error) {
-	if p.ctx.Err() != nil {
+	if !p.terminalReady(t.Epoch) {
 		return nil, &sshconnector.Failure{Code: "agent_closed"}
 	}
 	setup, cancel := context.WithTimeout(ctx, agentproto.TerminalSetupTimeout)

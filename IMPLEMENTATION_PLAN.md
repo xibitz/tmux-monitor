@@ -25,7 +25,7 @@ pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus
 | T21 | PARTIAL | Seluruh operasi SSH tersedia di source **BELUM DIUJI**. Mencakup snapshot pane, create/rename/kill window, split/kill pane, dan label dampak bersama. Paritas Agent menunggu T22–T24. |
 | T22 | PARTIAL | Source pairing token sekali pakai, revoke, CLI, WSS version/generation, RPC inventaris read-only dan UI tersedia **BELUM DIUJI**. Gate token reuse, revoke, Serve/TLS dan generation tetap terbuka. |
 | T23 | PARTIAL | Source PTY Agent read-only/interaktif, tiket dan framing browser bersama, serta pelepasan terkonfirmasi tersedia **BELUM DIUJI**. Suite T12 belum dijalankan pada Agent. |
-| T24 | TODO | Heartbeat, reconnect/jitter, capability refresh dan rekonsiliasi. |
+| T24 | PARTIAL | Source heartbeat v2, expiry, reconnect berjeda, fence instance/generation, refresh capability/inventaris dan status UI tersedia **BELUM DIUJI**. Gate sleep/wake dan koneksi ganda tetap terbuka. |
 | T30 | TODO | Manifest/PWA/service worker asset-only, standalone dan uji perangkat. |
 | T31 | PARTIAL | Tombol sentuh, Ctrl/Alt/Shift sekali pakai, kolom kombinasi, prefix control-key lokal dan konfirmasi paste multiline tersedia. Matriks byte otomatis tersedia; aksesibilitas dan keyboard/IME HP nyata belum tuntas. |
 | T32 | PARTIAL | Audit dasar dan redaction tests tersedia; filter/retensi/security review/fuzz belum. |
@@ -162,6 +162,17 @@ lokal, browser dan CI belum dijalankan.
   revoke saat aktif, batas output, dan reload viewer read-only.
 - [ ] Kualifikasi transport Serve aktual untuk stream kedua, bind
   ticket/generation, dan penolakan replay serta resize.
+
+Checkpoint T24 menambahkan schema007 dan subprotokol `tmux-agent.v2`, dengan
+kompatibilitas server terhadap Agent v1. Build, uji lokal, browser dan CI
+belum dijalankan.
+
+- [ ] Kualifikasi 6→7→6, hello ACK hilang, duplikasi proses dan koneksi,
+  generation usang, restart hub, revoke saat reconnect, dan penolakan versi.
+- [ ] Kualifikasi heartbeat/ACK hilang, sleep/wake, jaringan berganti,
+  reconnect berjeda, refresh capability, restart tmux, dan cache stale.
+- [ ] Kualifikasi transisi dashboard serta penutupan PTY dan tiket lintas
+  generation tanpa pemulihan mode atau replay input.
 
 | Tahap | Prioritas | Hasil yang dapat didemokan | Gate keluar |
 |---|---:|---|---|

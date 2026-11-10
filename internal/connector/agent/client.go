@@ -3,9 +3,12 @@ package agent
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
+	mathrand "math/rand/v2"
 	"net/http"
 	"net/url"
 	"strings"
@@ -94,37 +97,82 @@ func (b Binding) Run(ctx context.Context, osName string, enableTerminal bool) er
 		return err
 	}
 	u.Scheme, u.Path = "wss", "/ws/v1/agent"
+	var seed [16]byte
+	if _, err := rand.Read(seed[:]); err != nil {
+		return errors.New("cannot create Agent instance ID")
+	}
+	instance := hex.EncodeToString(seed[:])
+	var generation int64
+	c := client()
+	defer c.CloseIdleConnections()
+	backoff := time.Second
+	for ctx.Err() == nil {
+		uptime, err := b.connect(ctx, c, u.String(), osName, instance, &generation, enableTerminal)
+		if ctx.Err() != nil {
+			return nil
+		}
+		if errors.Is(err, errAgentRejected) {
+			return err
+		}
+		if uptime >= time.Minute {
+			backoff = time.Second
+		}
+		delay := backoff/2 + mathrand.N(backoff/2)
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil
+		case <-timer.C:
+		}
+		backoff = min(backoff*2, 30*time.Second)
+	}
+	return nil
+}
+
+var errAgentRejected = errors.New("Agent cannot reconnect")
+
+func (b Binding) connect(ctx context.Context, c *http.Client, endpoint, osName, instance string, generation *int64, enableTerminal bool) (time.Duration, error) {
 	probe, cancelProbe := context.WithTimeout(ctx, 2*time.Second)
 	version, _ := tmuxVersion(probe)
 	cancelProbe()
 	dial, cancelDial := context.WithTimeout(ctx, 10*time.Second)
-	c := client()
-	defer c.CloseIdleConnections()
-	conn, _, err := websocket.Dial(dial, u.String(), &websocket.DialOptions{
+	conn, response, err := websocket.Dial(dial, endpoint, &websocket.DialOptions{
 		HTTPClient: c, HTTPHeader: http.Header{"Authorization": {"Bearer " + b.Credential}},
 		Subprotocols: []string{agentproto.Subprotocol}, CompressionMode: websocket.CompressionDisabled,
 	})
 	cancelDial()
 	if err != nil {
-		return errors.New("Agent WebSocket rejected or unreachable")
+		if response != nil && (response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden) {
+			return 0, errors.Join(errAgentRejected, errors.New("credential or Tailnet IP rejected"))
+		}
+		return 0, errors.New("Agent WebSocket unreachable")
 	}
 	defer conn.CloseNow()
 	if conn.Subprotocol() != agentproto.Subprotocol {
-		return errors.New("Agent protocol mismatch")
+		return 0, errors.Join(errAgentRejected, errors.New("upgrade the hub to the current Agent protocol"))
 	}
 	conn.SetReadLimit(agentproto.ControlLimit)
 	helloCtx, cancelHello := context.WithTimeout(ctx, agentproto.HandshakeTimeout)
 	hello := agentproto.Hello{Type: "hello", Version: agentproto.Version, AgentID: b.AgentID, OS: osName,
-		OSUser: b.OSUser, Socket: b.Socket, Tmux: version, Inventory: true, Terminal: enableTerminal}
+		OSUser: b.OSUser, Socket: b.Socket, Tmux: version, Inventory: true, Terminal: enableTerminal,
+		InstanceID: instance, PreviousGeneration: *generation}
 	err = agentproto.Write(helloCtx, conn, hello)
 	var ack agentproto.HelloAck
 	if err == nil {
 		err = agentproto.Read(helloCtx, conn, &ack)
 	}
 	cancelHello()
-	if err != nil || ack.Type != "hello.ack" || ack.Version != agentproto.Version ||
-		ack.AgentID != b.AgentID || ack.Generation < 1 {
-		return errors.New("Agent hello was rejected")
+	if websocket.CloseStatus(err) == agentproto.DuplicateConnection {
+		return 0, errors.Join(errAgentRejected, errors.New("another Agent instance owns this profile"))
 	}
-	return b.controlLoop(ctx, conn, c, ack.Generation, enableTerminal)
+	interval, ok := agentproto.HeartbeatInterval(ack.HeartbeatSeconds)
+	if err != nil || ack.Type != "hello.ack" || ack.Version != agentproto.Version ||
+		ack.AgentID != b.AgentID || ack.Generation <= *generation || !ok {
+		return 0, errors.New("Agent hello was rejected")
+	}
+	*generation = ack.Generation
+	started := time.Now()
+	err = b.controlLoop(ctx, conn, c, ack.Generation, interval, enableTerminal)
+	return time.Since(started), err
 }

@@ -23,13 +23,15 @@ type HostInput struct {
 }
 type Host struct {
 	HostInput
-	ID           string  `json:"id"`
-	State        string  `json:"state"`
-	StatusReason string  `json:"statusReason"`
-	ObservedAt   *string `json:"observedAt"`
-	CreatedAt    string  `json:"createdAt"`
-	UpdatedAt    string  `json:"updatedAt"`
-	Stale        bool    `json:"stale"`
+	ID                 string  `json:"id"`
+	State              string  `json:"state"`
+	StatusReason       string  `json:"statusReason"`
+	ObservedAt         *string `json:"observedAt"`
+	AgentLastHeartbeat *string `json:"agentLastHeartbeat,omitempty"`
+	AgentGeneration    int64   `json:"agentGeneration,omitempty"`
+	CreatedAt          string  `json:"createdAt"`
+	UpdatedAt          string  `json:"updatedAt"`
+	Stale              bool    `json:"stale"`
 }
 
 var safeName = regexp.MustCompile(`^[A-Za-z0-9._][A-Za-z0-9._-]{0,63}$`)
@@ -108,6 +110,14 @@ func (s *Server) listHosts(w http.ResponseWriter, r *http.Request) {
 	if rows.Err() != nil {
 		s.internal(w, r)
 		return
+	}
+	// Release the SQLite connection before acquiring the Agent registry lock.
+	if err := rows.Close(); err != nil {
+		s.internal(w, r)
+		return
+	}
+	for i := range hosts {
+		hosts[i] = s.applyAgentStatus(hosts[i])
 	}
 	s.json(w, 200, map[string]any{"hosts": hosts})
 }

@@ -291,6 +291,7 @@ function Dashboard({
     () => window.matchMedia("(max-width: 800px)").matches,
   );
   const loadSequence = useRef(0);
+  const hasAgent = hosts.some((host) => host.transport === "agent");
   async function refresh() {
     const sequence = ++loadSequence.current;
     setLoading(true);
@@ -312,6 +313,60 @@ function Dashboard({
   useEffect(() => {
     void refresh();
   }, [tab]);
+  useEffect(() => {
+    if (tab !== "hosts" || !hasAgent || !online) return;
+    let active = true;
+    let pending = false;
+    async function refreshAgentStatus() {
+      if (pending || document.visibilityState !== "visible") return;
+      pending = true;
+      const sequence = loadSequence.current;
+      try {
+        const { hosts: latest } = await api<{ hosts: Host[] }>("/hosts");
+        if (!active || sequence !== loadSequence.current) return;
+        const agents = new Map(
+          latest
+            .filter((host) => host.transport === "agent")
+            .map((host) => [host.id, host]),
+        );
+        function apply(host: Host): Host {
+          const status = agents.get(host.id);
+          if (
+            !status ||
+            host.transport !== "agent" ||
+            (status.agentGeneration &&
+              host.agentGeneration &&
+              status.agentGeneration < host.agentGeneration)
+          ) {
+            return host;
+          }
+          return {
+            ...host,
+            state: status.state,
+            statusReason: status.statusReason,
+            stale: status.stale,
+            observedAt: status.observedAt,
+            agentLastHeartbeat: status.agentLastHeartbeat,
+            agentGeneration: status.agentGeneration,
+          };
+        }
+        setHosts((current) => current.map(apply));
+        setSelected((current) => (current ? apply(current) : current));
+      } catch {
+        // The manual refresh still reports errors.
+      } finally {
+        pending = false;
+      }
+    }
+    const tick = window.setInterval(() => void refreshAgentStatus(), 10_000);
+    const onVisible = () => void refreshAgentStatus();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      active = false;
+      window.clearInterval(tick);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [hasAgent, online, tab]);
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
     window.addEventListener("online", update);
@@ -1082,13 +1137,17 @@ function HostBadge({ host }: { host: Host }) {
         ? "Belum tersedia"
         : host.statusReason === "agent_disabled"
           ? "Agent nonaktif"
-          : online
-            ? "Terakhir terhubung"
-            : host.state === "ONLINE"
-              ? "Periksa ulang"
-              : host.state === "DEGRADED"
-                ? "Perlu diperiksa"
-                : "Belum terhubung";
+          : host.state === "RECONNECTING"
+            ? "Menyegarkan Agent"
+            : online
+              ? host.transport === "agent"
+                ? "Agent terhubung"
+                : "Terakhir terhubung"
+              : host.state === "ONLINE"
+                ? "Periksa ulang"
+                : host.state === "DEGRADED"
+                  ? "Perlu diperiksa"
+                  : "Belum terhubung";
   return (
     <span className={`status-badge ${online ? "verified" : ""}`}>
       <span />
@@ -1269,9 +1328,18 @@ function HostDetails({
     paneSnapshotTarget?.hostId === host.id ? paneSnapshotTarget : undefined;
   const terminalEnabledForHost =
     host.transport === "ssh" ? terminalEnabled : agentTerminalEnabled;
+  const agentInventoryOutdated =
+    host.transport === "agent" &&
+    (host.state !== "ONLINE" ||
+      host.stale ||
+      !host.agentGeneration ||
+      !inventory ||
+      host.agentGeneration !== inventory.agentGeneration ||
+      !(Date.now() - Date.parse(inventory.observedAt) <= 30_000));
   const terminalAvailable =
     terminalEnabledForHost &&
-    (host.transport === "ssh" || inventory?.capabilities.ptyAttach === true);
+    (host.transport === "ssh" ||
+      (!agentInventoryOutdated && inventory?.capabilities.ptyAttach === true));
   const layout = layoutOptions?.hostId === host.id ? layoutOptions : undefined;
   const canChangeLayout =
     layout?.canKillWindow || layout?.canSplitPane || layout?.canKillPane;
@@ -1357,7 +1425,7 @@ function HostDetails({
             <HostBadge host={host} />
             <p>
               {host.observedAt
-                ? `Pemeriksaan terakhir: ${formatTime(host.observedAt)}. Status ini adalah hasil observasi terakhir.`
+                ? `Inventaris terakhir diobservasi ${formatTime(host.observedAt)}.`
                 : "Koneksi dan inventaris tmux belum diperiksa."}
             </p>
           </div>
@@ -1370,6 +1438,12 @@ function HostDetails({
             <dd>{host.osUser}</dd>
             <dt>Socket tmux</dt>
             <dd>{host.socketName}</dd>
+            {host.agentLastHeartbeat && (
+              <>
+                <dt>Heartbeat Agent</dt>
+                <dd>{formatTime(host.agentLastHeartbeat)}</dd>
+              </>
+            )}
             <dt>Lingkungan</dt>
             <dd>{host.environment || "—"}</dd>
           </dl>
@@ -1501,10 +1575,11 @@ function HostDetails({
                 Diambil {formatTime(inventory.observedAt)} ·{" "}
                 {inventory.sessions.length} session
               </p>
-              {inventory.stale && (
+              {(inventory.stale || agentInventoryOutdated) && (
                 <div className="error-notice" role="status">
-                  Pemeriksaan gagal ({inventory.statusReason}). Menampilkan
-                  inventaris terakhir; data ini sudah stale.
+                  {inventory.stale
+                    ? `Menampilkan inventaris lama (${inventory.statusReason}). Periksa kembali untuk menyegarkannya.`
+                    : "Inventaris Agent berasal dari koneksi atau observasi sebelumnya. Periksa kembali untuk menyegarkannya."}
                 </div>
               )}
               {(canRename ||

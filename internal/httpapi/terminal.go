@@ -65,6 +65,10 @@ func (s *Server) terminalTicket(w http.ResponseWriter, r *http.Request) {
 	}
 	t := terminalTicket{UserID: u.ID, TokenHash: identity.TokenHash(token(r)), HostID: h.ID, Socket: h.SocketName, KeyRef: record.KeyRef, Target: body.SessionID, Epoch: body.Epoch, Mode: "read_only"}
 	if peer != nil {
+		if !peer.terminalReady(body.Epoch) {
+			s.fail(w, r, 409, "conflict", "Inventaris Agent berubah. Periksa inventaris sebelum membuka terminal.")
+			return
+		}
 		t.AgentID, t.AgentGeneration = peer.id, peer.generation
 	}
 	raw, allowed := s.issueTerminalTicket(t, 30*time.Second)
@@ -107,18 +111,11 @@ func (s *Server) viewerAccess(ctx context.Context, u identity.User, id string) (
 		return h, record, nil, err
 	}
 	p := s.agents.peer(id)
-	if h.Transport != "agent" || !s.agentTerminalEnabled() || p == nil || !p.terminal ||
-		p.socket != h.SocketName || p.osUser != h.OSUser || p.ctx.Err() != nil {
+	if h.Transport != "agent" || !s.agentTerminalEnabled() || p == nil ||
+		p.socket != h.SocketName || p.osUser != h.OSUser || !p.terminalReady("") {
 		return h, sshconnector.Record{}, nil, sql.ErrNoRows
 	}
-	select {
-	case <-p.ready:
-	default:
-		return h, sshconnector.Record{}, nil, sql.ErrNoRows
-	}
-	var active bool
-	err = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM agent_identities
-		WHERE id=? AND host_id=? AND generation=? AND revoked_at IS NULL)`, p.id, h.ID, p.generation).Scan(&active)
+	active, err := p.current(ctx, s.db)
 	if err == nil && !active {
 		err = sql.ErrNoRows
 	}
@@ -132,7 +129,7 @@ func (t terminalTicket) matches(h Host, record sshconnector.Record, peer *agentP
 	if peer == nil {
 		return h.Transport == "ssh" && t.AgentID == "" && record.KeyRef == t.KeyRef
 	}
-	return h.Transport == "agent" && peer.id == t.AgentID && peer.generation == t.AgentGeneration
+	return h.Transport == "agent" && peer.id == t.AgentID && peer.generation == t.AgentGeneration && peer.terminalReady(t.Epoch)
 }
 
 func (s *Server) terminalUpgrade(w http.ResponseWriter, r *http.Request) {

@@ -12,7 +12,7 @@ import (
 	"github.com/xibitz/tmux-monitor/internal/agentproto"
 )
 
-func (b Binding) controlLoop(parent context.Context, conn *websocket.Conn, client *http.Client, generation int64, terminal bool) error {
+func (b Binding) controlLoop(parent context.Context, conn *websocket.Conn, client *http.Client, generation int64, heartbeat time.Duration, terminal bool) error {
 	ctx, cancel := context.WithCancel(parent)
 	var wg sync.WaitGroup
 	defer func() {
@@ -21,6 +21,11 @@ func (b Binding) controlLoop(parent context.Context, conn *websocket.Conn, clien
 	}()
 	inventory := make(chan struct{}, 1)
 	viewers := make(chan struct{}, 4)
+	acknowledgements := make(chan uint64, agentproto.MissedHeartbeats)
+	wg.Go(func() {
+		defer cancel()
+		b.sendHeartbeats(ctx, conn, generation, heartbeat, acknowledgements)
+	})
 	for {
 		kind, data, err := conn.Read(ctx)
 		if err != nil {
@@ -34,6 +39,16 @@ func (b Binding) controlLoop(parent context.Context, conn *websocket.Conn, clien
 			return errors.New("invalid Agent RPC")
 		}
 		switch envelope.Type {
+		case agentproto.HeartbeatAckType:
+			var ack agentproto.HeartbeatAck
+			if agentproto.Decode(data, &ack) != nil || ack.AgentID != b.AgentID || ack.Generation != generation || ack.Sequence == 0 {
+				return errors.New("invalid heartbeat acknowledgement")
+			}
+			select {
+			case acknowledgements <- ack.Sequence:
+			default:
+				return errors.New("too many heartbeat acknowledgements")
+			}
 		case agentproto.Snapshot:
 			var req agentproto.Request
 			if agentproto.Decode(data, &req) != nil || req.AgentID != b.AgentID || req.Generation != generation ||

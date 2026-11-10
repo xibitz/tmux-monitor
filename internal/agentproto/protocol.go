@@ -14,8 +14,10 @@ import (
 	"github.com/xibitz/tmux-monitor/internal/tmux"
 )
 
-const Version = 1
-const Subprotocol = "tmux-agent.v1"
+const Version = 2
+const Subprotocol = "tmux-agent.v2"
+const LegacyVersion = 1
+const LegacySubprotocol = "tmux-agent.v1"
 const HandshakeTimeout = 5 * time.Second
 const SnapshotTimeout = 8 * time.Second
 const ControlLimit = 4096
@@ -66,22 +68,25 @@ type EnrollResult struct {
 }
 
 type Hello struct {
-	Type      string `json:"type"`
-	Version   int    `json:"version"`
-	AgentID   string `json:"agentId"`
-	OS        string `json:"os"`
-	OSUser    string `json:"osUser"`
-	Socket    string `json:"socket"`
-	Tmux      string `json:"tmuxVersion"`
-	Inventory bool   `json:"inventory"`
-	Terminal  bool   `json:"terminal,omitempty"`
+	Type               string `json:"type"`
+	Version            int    `json:"version"`
+	AgentID            string `json:"agentId"`
+	OS                 string `json:"os"`
+	OSUser             string `json:"osUser"`
+	Socket             string `json:"socket"`
+	Tmux               string `json:"tmuxVersion"`
+	Inventory          bool   `json:"inventory"`
+	Terminal           bool   `json:"terminal,omitempty"`
+	InstanceID         string `json:"instanceId,omitempty"`
+	PreviousGeneration int64  `json:"previousGeneration,omitempty"`
 }
 
 type HelloAck struct {
-	Type       string `json:"type"`
-	Version    int    `json:"version"`
-	AgentID    string `json:"agentId"`
-	Generation int64  `json:"generation"`
+	Type             string `json:"type"`
+	Version          int    `json:"version"`
+	AgentID          string `json:"agentId"`
+	Generation       int64  `json:"generation"`
+	HeartbeatSeconds int    `json:"heartbeatSeconds,omitempty"`
 }
 
 type Request struct {

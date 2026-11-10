@@ -39,7 +39,11 @@ func scanObservedHost(row scanner) (Host, error) {
 	return h, err
 }
 func (s *Server) observedHost(ctx context.Context, id string) (Host, error) {
-	return scanObservedHost(s.db.QueryRowContext(ctx, "SELECT "+observedHostColumns+observedHostJoin+"WHERE h.id=?", id))
+	h, err := scanObservedHost(s.db.QueryRowContext(ctx, "SELECT "+observedHostColumns+observedHostJoin+"WHERE h.id=?", id))
+	if err != nil {
+		return h, err
+	}
+	return s.applyAgentStatus(h), nil
 }
 
 func (s *Server) sshMetadata(w http.ResponseWriter, r *http.Request) {
@@ -98,27 +102,19 @@ func (s *Server) probe(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) observe(r *http.Request, h Host, audit bool) (tmux.Inventory, error) {
+	if h.Transport == "agent" {
+		return s.observeAgent(r, h, audit)
+	}
 	var inv tmux.Inventory
-	var record sshconnector.Record
-	var peer *agentPeer
-	var err error
-	switch h.Transport {
-	case "agent":
-		if s.agentEnabled() {
-			inv, peer, err = s.agents.snapshot(r.Context(), h)
-		} else {
-			err = &sshconnector.Failure{Code: "agent_disabled"}
-		}
-	case "ssh":
-		record, err = s.credentials().Load(r.Context(), h.ID)
-		if err != nil && !errors.Is(err, sshconnector.ErrRequired) {
-			return inv, err
-		}
-		if err == nil {
-			inv, err = s.ssh.Snapshot(r.Context(), sshconnector.Host{ID: h.ID, Address: h.TailnetAddress, User: h.OSUser, Socket: h.SocketName}, record)
-		}
-	default:
+	if h.Transport != "ssh" {
 		return inv, errors.New("unknown host transport")
+	}
+	record, err := s.credentials().Load(r.Context(), h.ID)
+	if err != nil && !errors.Is(err, sshconnector.ErrRequired) {
+		return inv, err
+	}
+	if err == nil {
+		inv, err = s.ssh.Snapshot(r.Context(), sshconnector.Host{ID: h.ID, Address: h.TailnetAddress, User: h.OSUser, Socket: h.SocketName}, record)
 	}
 	code, state, result := "ok", "ONLINE", "success"
 	if err == nil && inv.StatusReason != "" {
@@ -137,23 +133,11 @@ func (s *Server) observe(r *http.Request, h Host, audit bool) (tmux.Inventory, e
 		}
 		return inv, err
 	}
-	now := storage.Now()
 	tx, dbErr := s.db.BeginTx(r.Context(), nil)
 	if dbErr != nil {
 		return inv, dbErr
 	}
 	defer tx.Rollback()
-	if peer != nil {
-		var valid bool
-		dbErr = tx.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM agent_identities
-			WHERE id=? AND host_id=? AND generation=? AND revoked_at IS NULL)`, peer.id, h.ID, peer.generation).Scan(&valid)
-		if dbErr != nil {
-			return tmux.Inventory{}, dbErr
-		}
-		if !valid {
-			return tmux.Inventory{}, &sshconnector.Failure{Code: "agent_offline"}
-		}
-	}
 	// Discard an in-flight result if credentials were rotated/revoked while SSH
 	// was running. An old observation must not resurrect invalidated cache data.
 	if record.KeyRef != "" {
@@ -174,25 +158,8 @@ func (s *Server) observe(r *http.Request, h Host, audit bool) (tmux.Inventory, e
 			return tmux.Inventory{}, checkErr
 		}
 	}
-	_, dbErr = tx.ExecContext(r.Context(), `INSERT INTO host_observations(host_id,state,reason,observed_at) VALUES (?,?,?,?) ON CONFLICT(host_id) DO UPDATE SET state=excluded.state,reason=excluded.reason,observed_at=excluded.observed_at`, h.ID, state, code, now)
-	if dbErr != nil {
+	if dbErr = storeObservation(r.Context(), tx, h.ID, state, code, &inv, err == nil); dbErr != nil {
 		return inv, dbErr
-	}
-	if err == nil {
-		if peer != nil {
-			inv.Capabilities.PTYAttach = s.agentTerminalEnabled() && peer.terminal && inv.Capabilities.ServerRunning &&
-				tmux.TerminalVersionSupported(inv.Capabilities.TmuxVersion)
-		}
-		inv.ObservedAt = now
-		inv.Stale = false
-		body, marshalErr := json.Marshal(inv)
-		if marshalErr != nil {
-			return inv, marshalErr
-		}
-		_, dbErr = tx.ExecContext(r.Context(), `INSERT INTO inventory_cache(host_id,snapshot_json,observed_at) VALUES (?,?,?) ON CONFLICT(host_id) DO UPDATE SET snapshot_json=excluded.snapshot_json,observed_at=excluded.observed_at`, h.ID, string(body), now)
-		if dbErr != nil {
-			return inv, dbErr
-		}
 	}
 	if audit {
 		if dbErr = auditTx(r, tx, user(r).ID, "host.probe", h.ID, result); dbErr != nil {
@@ -203,20 +170,51 @@ func (s *Server) observe(r *http.Request, h Host, audit bool) (tmux.Inventory, e
 		return inv, dbErr
 	}
 	if err != nil {
-		var body string
-		cacheErr := s.db.QueryRowContext(r.Context(), "SELECT snapshot_json FROM inventory_cache WHERE host_id=? AND length(snapshot_json)<=?", h.ID, 4*tmux.MaxOutput).Scan(&body)
-		if cacheErr == nil && json.Unmarshal([]byte(body), &inv) == nil && inv.HostID == h.ID && inv.SocketID == h.SocketName && inv.Transport == h.Transport && inv.Sessions != nil && validObservationTime(inv.ObservedAt) {
-			inv.Stale = true
-			inv.State = state
-			inv.StatusReason = code
-			return inv, nil
-		}
-		if cacheErr != nil && !errors.Is(cacheErr, sql.ErrNoRows) {
-			return inv, cacheErr
-		}
-		return inv, err
+		return s.cachedObservation(r.Context(), h, state, code, err)
 	}
 	return inv, nil
+}
+
+func storeObservation(ctx context.Context, tx *sql.Tx, hostID, state, code string, inv *tmux.Inventory, cache bool) error {
+	now := storage.Now()
+	_, err := tx.ExecContext(ctx, `INSERT INTO host_observations(host_id,state,reason,observed_at) VALUES (?,?,?,?)
+		ON CONFLICT(host_id) DO UPDATE SET state=excluded.state,reason=excluded.reason,observed_at=excluded.observed_at`,
+		hostID, state, code, now)
+	if err != nil || !cache {
+		return err
+	}
+	inv.ObservedAt, inv.Stale = now, false
+	body, err := json.Marshal(inv)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO inventory_cache(host_id,snapshot_json,observed_at) VALUES (?,?,?)
+		ON CONFLICT(host_id) DO UPDATE SET snapshot_json=excluded.snapshot_json,observed_at=excluded.observed_at`,
+		hostID, string(body), now)
+	return err
+}
+
+func (s *Server) cachedObservation(ctx context.Context, h Host, state, code string, original error) (tmux.Inventory, error) {
+	var body string
+	var inv tmux.Inventory
+	err := s.db.QueryRowContext(ctx, "SELECT snapshot_json FROM inventory_cache WHERE host_id=? AND length(snapshot_json)<=?", h.ID, 4*tmux.MaxOutput).Scan(&body)
+	if err == nil && json.Unmarshal([]byte(body), &inv) == nil && inv.HostID == h.ID && inv.SocketID == h.SocketName &&
+		inv.Transport == h.Transport && inv.Sessions != nil && validObservationTime(inv.ObservedAt) {
+		inv.Stale, inv.State, inv.StatusReason = true, state, code
+		if h.Transport == "agent" {
+			inv.Capabilities.PTYAttach = false
+		}
+		return inv, nil
+	}
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return tmux.Inventory{}, err
+	}
+	return tmux.Inventory{}, original
+}
+
+func isObservationFailure(err error) bool {
+	var failure *sshconnector.Failure
+	return errors.As(err, &failure) || errors.Is(err, sshconnector.ErrRequired) || errors.Is(err, sshconnector.ErrCredentials)
 }
 
 func validObservationTime(value string) bool {
@@ -254,13 +252,14 @@ func (s *Server) observationError(w http.ResponseWriter, r *http.Request, err er
 		status, message = 503, "Perintah observasi tmux gagal. Periksa socket dan izin akun OS."
 	case "agent_offline":
 		message = "Agent belum terhubung. Jalankan Agent pada host yang dipasangkan."
+	case "agent_reconciling":
+		status, message = 503, "Agent sedang menyegarkan inventaris. Tunggu lalu periksa lagi."
 	case "agent_disabled":
 		status, message = 503, "Agent belum diaktifkan pada hub HTTPS."
 	case "busy":
 		status, message = 429, "Pemeriksaan host sedang berjalan. Tunggu lalu coba lagi."
 	default:
-		var f *sshconnector.Failure
-		if !errors.As(err, &f) && !errors.Is(err, sshconnector.ErrRequired) && !errors.Is(err, sshconnector.ErrCredentials) {
+		if !isObservationFailure(err) {
 			s.internal(w, r)
 			return
 		}
