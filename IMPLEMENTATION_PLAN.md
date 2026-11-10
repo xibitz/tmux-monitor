@@ -23,7 +23,7 @@ pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus
 | T13 | PARTIAL | Heartbeat v2 + ping/pong, deadline browser/input, offline/pagehide, mode-response fence dan reopen read-only tanpa replay tersedia. Uji idle/timeout/sequence/restart hub terisolasi dan browser fixture lulus. Network switch/sleep/perangkat nyata tetap terbuka. |
 | T20 | PARTIAL | Rename baseline99c0791 teruji. Source create/kill + createRevision/guard subtree, konfirmasi ID, izin kill, flag lifecycle default-off dan migrasi005 ditambahkan **BELUM DIUJI** atas permintaan pengguna. Agent parity belum. |
 | T21 | PARTIAL | Seluruh operasi SSH tersedia di source **BELUM DIUJI**. Mencakup snapshot pane, create/rename/kill window, split/kill pane, dan label dampak bersama. Paritas Agent menunggu T22–T24. |
-| T22 | TODO | Enrollment/revoke Agent, credential, handshake/generation dan RPC. |
+| T22 | PARTIAL | Source pairing token sekali pakai, revoke, CLI, WSS version/generation, RPC inventaris read-only dan UI tersedia **BELUM DIUJI**. Gate token reuse, revoke, Serve/TLS dan generation tetap terbuka. |
 | T23 | TODO | PTY Agent dan paritas mode terminal. |
 | T24 | TODO | Heartbeat, reconnect/jitter, capability refresh dan rekonsiliasi. |
 | T30 | TODO | Manifest/PWA/service worker asset-only, standalone dan uji perangkat. |
@@ -140,6 +140,17 @@ browser dan CI belum dijalankan.
   default-off, konfirmasi ID untuk kill, guard window/pane serta ledger operasi.
 - [ ] Implementasikan paritas setelah konektor Agent T22–T24 tersedia, lalu
   jalankan suite kontrak kedua transport setelah testing diizinkan.
+
+Checkpoint T22 menambahkan schema006 dan konektor inventaris Agent. Flag Agent
+default-off dan hanya tersedia dalam mode HTTPS lewat Serve. Build, uji lokal,
+browser dan CI belum dijalankan.
+
+- [ ] Kualifikasi migrasi 5→6→5, token salah/IP salah/expired/reuse dan revoke
+  aktif, termasuk revoke atau hapus profil saat RPC berlangsung.
+- [ ] Kualifikasi header Serve dan penolakan Funnel, TLS dan redirect, file
+  credential 0600, generation lama/ganda, deadline, batas output dan inventaris
+  read-only di Linux/macOS.
+- [ ] Kualifikasi UI pairing, revoke, status/refresh, expiry dan redaksi token.
 
 | Tahap | Prioritas | Hasil yang dapat didemokan | Gate keluar |
 |---|---:|---|---|

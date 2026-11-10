@@ -124,7 +124,7 @@ func (s *Server) createHost(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, 422, "invalid_request", msg)
 		return
 	}
-	h := Host{HostInput: input, ID: storage.ID("h_"), State: "UNREACHABLE", StatusReason: "connector_pending", CreatedAt: storage.Now(), UpdatedAt: storage.Now(), Stale: true}
+	h := Host{HostInput: input, ID: storage.ID("h_"), State: "UNREACHABLE", StatusReason: "agent_offline", CreatedAt: storage.Now(), UpdatedAt: storage.Now(), Stale: true}
 	if h.Transport == "ssh" {
 		h.StatusReason = "credentials_required"
 	}
@@ -238,6 +238,7 @@ func (s *Server) deleteHost(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, r)
 		return
 	}
+	s.agents.disconnect(id, "")
 	if keyRef != "" {
 		if err := s.credentials().Remove(keyRef); err != nil {
 			s.log.Warn("credential cleanup deferred", "request_id", requestID(r))

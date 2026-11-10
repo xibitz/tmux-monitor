@@ -14,6 +14,7 @@ type Config struct {
 	DataDir                 string
 	Origin                  string
 	Development             bool
+	AgentEnabled            bool
 	TerminalEnabled         bool
 	PaneSnapshotEnabled     bool
 	MutationsEnabled        bool
@@ -29,6 +30,10 @@ func Load() (Config, error) {
 	c.Development, err = strconv.ParseBool(env("TMUX_MONITOR_DEV", "false"))
 	if err != nil {
 		return c, fmt.Errorf("TMUX_MONITOR_DEV must be true or false")
+	}
+	c.AgentEnabled, err = strconv.ParseBool(env("TMUX_MONITOR_AGENT_ENABLED", "false"))
+	if err != nil {
+		return c, fmt.Errorf("TMUX_MONITOR_AGENT_ENABLED must be true or false")
 	}
 	c.TerminalEnabled, err = strconv.ParseBool(env("TMUX_MONITOR_TERMINAL_ENABLED", "false"))
 	if err != nil {
@@ -76,11 +81,17 @@ func (c Config) Validate() error {
 		return fmt.Errorf("TMUX_MONITOR_ORIGIN must be an exact origin without path, credentials, query, or fragment")
 	}
 	if c.Development {
+		if c.AgentEnabled {
+			return fmt.Errorf("Agent enrollment and WebSocket require production HTTPS mode")
+		}
 		if u.Scheme != "http" || (u.Hostname() != "127.0.0.1" && u.Hostname() != "localhost") {
 			return fmt.Errorf("development origin must be HTTP on localhost or 127.0.0.1")
 		}
 	} else if u.Scheme != "https" {
 		return fmt.Errorf("production origin must use HTTPS")
+	}
+	if c.AgentEnabled && !strings.HasSuffix(strings.ToLower(u.Hostname()), ".ts.net") {
+		return fmt.Errorf("Agent requires an HTTPS Tailscale Serve origin")
 	}
 	if strings.TrimSpace(c.DataDir) == "" {
 		return fmt.Errorf("data directory must not be empty")

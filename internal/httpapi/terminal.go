@@ -424,8 +424,13 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	s.terminalClosing = true
 	s.stopTerminals()
 	s.viewMu.Unlock()
+	s.agents.stop()
 	done := make(chan struct{})
-	go func() { s.terminalWG.Wait(); close(done) }()
+	go func() {
+		s.terminalWG.Wait()
+		s.agents.wg.Wait()
+		close(done)
+	}()
 	select {
 	case <-done:
 		return nil

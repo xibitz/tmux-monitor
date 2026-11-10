@@ -23,7 +23,7 @@ func (s *Server) credentials() sshconnector.Store {
 
 const observedHostColumns = `h.id,h.label,h.transport,h.tailnet_address,h.os_user,h.socket_name,h.environment,h.created_at,h.updated_at,
 COALESCE(o.state,'UNREACHABLE'),
-CASE WHEN h.transport='agent' THEN 'connector_pending' WHEN c.host_id IS NULL THEN 'credentials_required' ELSE COALESCE(o.reason,'not_probed') END,
+CASE WHEN h.transport='agent' THEN COALESCE(o.reason,'agent_offline') WHEN c.host_id IS NULL THEN 'credentials_required' ELSE COALESCE(o.reason,'not_probed') END,
 o.observed_at`
 const observedHostJoin = ` FROM hosts h LEFT JOIN host_observations o ON o.host_id=h.id LEFT JOIN ssh_credentials c ON c.host_id=h.id `
 
@@ -100,10 +100,16 @@ func (s *Server) probe(w http.ResponseWriter, r *http.Request) {
 func (s *Server) observe(r *http.Request, h Host, audit bool) (tmux.Inventory, error) {
 	var inv tmux.Inventory
 	var record sshconnector.Record
+	var peer *agentPeer
 	var err error
-	if h.Transport != "ssh" {
-		err = &sshconnector.Failure{Code: "agent_unavailable"}
-	} else {
+	switch h.Transport {
+	case "agent":
+		if s.agentEnabled() {
+			inv, peer, err = s.agents.snapshot(r.Context(), h)
+		} else {
+			err = &sshconnector.Failure{Code: "agent_disabled"}
+		}
+	case "ssh":
 		record, err = s.credentials().Load(r.Context(), h.ID)
 		if err != nil && !errors.Is(err, sshconnector.ErrRequired) {
 			return inv, err
@@ -111,6 +117,8 @@ func (s *Server) observe(r *http.Request, h Host, audit bool) (tmux.Inventory, e
 		if err == nil {
 			inv, err = s.ssh.Snapshot(r.Context(), sshconnector.Host{ID: h.ID, Address: h.TailnetAddress, User: h.OSUser, Socket: h.SocketName}, record)
 		}
+	default:
+		return inv, errors.New("unknown host transport")
 	}
 	code, state, result := "ok", "ONLINE", "success"
 	if err == nil && inv.StatusReason != "" {
@@ -135,6 +143,17 @@ func (s *Server) observe(r *http.Request, h Host, audit bool) (tmux.Inventory, e
 		return inv, dbErr
 	}
 	defer tx.Rollback()
+	if peer != nil {
+		var valid bool
+		dbErr = tx.QueryRowContext(r.Context(), `SELECT EXISTS(SELECT 1 FROM agent_identities
+			WHERE id=? AND host_id=? AND generation=? AND revoked_at IS NULL)`, peer.id, h.ID, peer.generation).Scan(&valid)
+		if dbErr != nil {
+			return tmux.Inventory{}, dbErr
+		}
+		if !valid {
+			return tmux.Inventory{}, &sshconnector.Failure{Code: "agent_offline"}
+		}
+	}
 	// Discard an in-flight result if credentials were rotated/revoked while SSH
 	// was running. An old observation must not resurrect invalidated cache data.
 	if record.KeyRef != "" {
@@ -182,7 +201,7 @@ func (s *Server) observe(r *http.Request, h Host, audit bool) (tmux.Inventory, e
 	if err != nil {
 		var body string
 		cacheErr := s.db.QueryRowContext(r.Context(), "SELECT snapshot_json FROM inventory_cache WHERE host_id=? AND length(snapshot_json)<=?", h.ID, 4*tmux.MaxOutput).Scan(&body)
-		if cacheErr == nil && json.Unmarshal([]byte(body), &inv) == nil && inv.HostID == h.ID && inv.SocketID == h.SocketName && inv.Transport == "ssh" && inv.Sessions != nil && validObservationTime(inv.ObservedAt) {
+		if cacheErr == nil && json.Unmarshal([]byte(body), &inv) == nil && inv.HostID == h.ID && inv.SocketID == h.SocketName && inv.Transport == h.Transport && inv.Sessions != nil && validObservationTime(inv.ObservedAt) {
 			inv.Stale = true
 			inv.State = state
 			inv.StatusReason = code
@@ -203,7 +222,7 @@ func validObservationTime(value string) bool {
 
 func (s *Server) observationError(w http.ResponseWriter, r *http.Request, err error) {
 	code := sshconnector.Code(err)
-	status, message := 423, "Host belum dapat dijangkau melalui SSH. Session tmux tidak dianggap berhenti."
+	status, message := 423, "Host belum dapat dijangkau. Session tmux tidak dianggap berhenti."
 	switch code {
 	case "credentials_required":
 		status, message = 422, "Konfigurasi SSH belum tersedia. Pasang key dan host key terverifikasi melalui perintah lokal hub ssh-configure."
@@ -218,19 +237,21 @@ func (s *Server) observationError(w http.ResponseWriter, r *http.Request, err er
 	case "authentication_failed":
 		message = "Autentikasi SSH gagal. Periksa akun OS dan public key yang dipasang pada host."
 	case "timeout":
-		message = "Batas waktu koneksi atau observasi SSH terlampaui."
+		message = "Batas waktu koneksi atau observasi terlampaui."
 	case "os_user_mismatch":
 		status, message = 503, "Akun OS yang terhubung tidak sesuai dengan profil."
 	case "tmux_missing":
-		status, message = 503, "SSH terhubung, tetapi tmux yang didukung belum ditemukan pada host."
+		status, message = 503, "tmux yang didukung belum ditemukan pada host."
 	case "inventory_invalid", "inventory_changed":
 		status, message = 503, "Inventaris tmux belum dapat diverifikasi. Coba periksa ulang."
 	case "output_limit":
 		status, message = 503, "Output inventaris melebihi batas yang diizinkan."
 	case "command_failed":
-		status, message = 503, "SSH terhubung, tetapi perintah observasi tmux gagal. Periksa socket dan izin akun OS."
-	case "agent_unavailable":
-		status, message = 503, "Konektor Agent belum tersedia. Tidak ada fallback ke SSH."
+		status, message = 503, "Perintah observasi tmux gagal. Periksa socket dan izin akun OS."
+	case "agent_offline":
+		message = "Agent belum terhubung. Jalankan Agent pada host yang dipasangkan."
+	case "agent_disabled":
+		status, message = 503, "Agent belum diaktifkan pada hub HTTPS."
 	case "busy":
 		status, message = 429, "Pemeriksaan host sedang berjalan. Tunggu lalu coba lagi."
 	default:

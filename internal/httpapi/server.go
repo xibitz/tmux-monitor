@@ -49,6 +49,7 @@ type Server struct {
 	lifecycle            sessionLifecycle
 	windowMutations      windowMutator
 	layoutMutations      layoutMutator
+	agents               agentConnections
 	viewMu               sync.Mutex
 	tickets              map[string]terminalTicket
 	viewers              map[string]*terminalViewer
@@ -64,6 +65,7 @@ type Server struct {
 func New(db *sql.DB, cfg config.Config, assets fs.FS, logger *slog.Logger) *Server {
 	s := &Server{db: db, cfg: cfg, assets: assets, log: logger, tickets: map[string]terminalTicket{}, viewers: map[string]*terminalViewer{}, terminalInterval: 2 * time.Second, terminalPingInterval: 5 * time.Second, terminalPingTimeout: 5 * time.Second}
 	s.terminalRoot, s.stopTerminals = context.WithCancel(context.Background())
+	s.agents = agentConnections{peers: make(map[string]*agentPeer), handshakes: make(chan struct{}, 8), snapshots: make(chan struct{}, 4)}
 	manager := sshconnector.New(s.credentials(), cfg.AllowedSSHHosts)
 	s.ssh = manager
 	s.terminal = manager
@@ -79,6 +81,9 @@ func New(db *sql.DB, cfg config.Config, assets fs.FS, logger *slog.Logger) *Serv
 	api.HandleFunc("GET /api/v1/hosts", s.listHosts)
 	api.HandleFunc("GET /api/v1/hosts/options", s.hostOptions)
 	api.HandleFunc("GET /api/v1/hosts/{id}/ssh", s.sshMetadata)
+	api.HandleFunc("GET /api/v1/hosts/{id}/agent", s.agentMetadata)
+	api.HandleFunc("POST /api/v1/agents/enrollments", s.issueAgentEnrollment)
+	api.HandleFunc("POST /api/v1/agents/{agentId}/revoke", s.revokeAgent)
 	api.HandleFunc("POST /api/v1/hosts/{id}/probe", s.probe)
 	api.HandleFunc("POST /api/v1/hosts", s.createHost)
 	api.HandleFunc("PATCH /api/v1/hosts/{id}", s.updateHost)
@@ -103,7 +108,9 @@ func New(db *sql.DB, cfg config.Config, assets fs.FS, logger *slog.Logger) *Serv
 	})
 	root := http.NewServeMux()
 	root.HandleFunc("GET /healthz", s.health)
+	root.HandleFunc("POST /api/v1/agents/enroll", s.enrollAgent)
 	root.Handle("/api/", s.authorize(api))
+	root.HandleFunc("GET /ws/v1/agent", s.agentUpgrade)
 	root.Handle("GET /ws/v1/terminal", s.authorize(http.HandlerFunc(s.terminalUpgrade)))
 	root.Handle("/ws/", s.authorize(api))
 	root.HandleFunc("/", s.static)

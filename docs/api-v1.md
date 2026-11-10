@@ -1,6 +1,6 @@
 # API v1 contract
 
-The PRD remains the product contract. This file defines the implemented M0 and SSH slices;
+The PRD remains the product contract. This file defines the implemented M0, SSH and Agent slices;
 unimplemented connectors never return invented inventory or connection success.
 All timestamps use RFC 3339 UTC. All responses under `/api` and `/ws` use
 `Cache-Control: no-store`. IDs are opaque. Errors have the form
@@ -9,7 +9,7 @@ All timestamps use RFC 3339 UTC. All responses under `/api` and `/ws` use
 
 | Method and path | Authorization | Request / response |
 | --- | --- | --- |
-| `GET /healthz` | Local listener | `{"status":"ok","schemaVersion":5}` in current source (migration005 untested); 503 if storage is unavailable |
+| `GET /healthz` | Local listener | `{"status":"ok","schemaVersion":6}` in current source (migration006 untested); 503 if storage is unavailable |
 | `POST /api/v1/auth/login` | Exact configured Origin, rate limited | `{username,password}` → `{user,csrfToken}` and session cookie; generic 401 for invalid credentials |
 | `GET /api/v1/me` | Session | `{user:{id,username,isAdmin},csrfToken}` |
 | `POST /api/v1/auth/logout` | Session + CSRF | 204; revoke session and expire cookie |
@@ -19,8 +19,8 @@ All timestamps use RFC 3339 UTC. All responses under `/api` and `/ws` use
 | `PATCH /api/v1/hosts/{id}` | Admin + CSRF | Full `HostInput` → `Host`; future connector configuration is immutable in this milestone |
 | `DELETE /api/v1/hosts/{id}` | Admin + CSRF | 204; deletes profile only, never touches tmux |
 | `GET /api/v1/hosts/{id}/ssh` | Admin | SSH configuration metadata: configured, port, host key fingerprint and configuredAt; no key or secret path |
-| `POST /api/v1/hosts/{id}/probe` | Admin + CSRF | Run bounded SSH/tmux observation; `{host,inventory}` on success; audit metadata only |
-| `GET /api/v1/hosts/{id}/inventory` | `tmux:read` | Fresh SSH snapshot, or last successful snapshot marked stale on failure; 404 for inaccessible/absent hosts |
+| `POST /api/v1/hosts/{id}/probe` | Admin + CSRF | Run bounded observation over the configured transport; `{host,inventory}` on success; audit metadata only |
+| `GET /api/v1/hosts/{id}/inventory` | `tmux:read` | Fresh snapshot, or last successful snapshot marked stale on failure; 404 for inaccessible/absent hosts |
 | `GET /api/v1/audit?limit=50&before=123` | Admin | `{events:[AuditEvent],nextCursor:"…"}`; maximum limit 100 |
 
 Mutations require `Origin` equal to `TMUX_MONITOR_ORIGIN` and
@@ -39,15 +39,49 @@ This endpoint does not accept credentials. It does not enroll an agent.
 
 `Host` adds `id`, `state`, `statusReason`, `stale`, `createdAt`, `updatedAt`,
 and nullable `observedAt`. State is the last explicit observation, not a live
-transport guarantee. New profiles have no observation; Agent is pending, and
-SSH needs local credential configuration. Old observations are marked stale.
+transport guarantee. New profiles have no observation. An Agent profile starts
+as `agent_offline`; SSH needs local credentials. Old observations are marked stale.
 Unreachable state never implies that a tmux process has stopped.
+
+## Experimental Agent pairing and inventory (T22, source only)
+
+`TMUX_MONITOR_AGENT_ENABLED=true` enables these paths in production HTTPS mode.
+Machine requests arrive through Tailscale Serve over the configured HTTPS host.
+The hub accepts one Serve-forwarded Tailnet IP, HTTPS and host header from its
+loopback peer and rejects Funnel requests. The loopback listener trusts local
+processes and must only be exposed by the trusted Serve proxy.
+
+| Endpoint | Authorization | Contract |
+|---|---|---|
+| `GET /api/v1/hosts/{id}/agent` | Admin | `{enabled,agentId?}` for an Agent profile. No credential returned. |
+| `POST /api/v1/agents/enrollments` | Admin, exact Origin, CSRF | `{hostId,tailnetIp}` → 201 `{token,expiresAt}`. Expires in 10 minutes and replaces any pending token for that profile. An active identity must be revoked before re-pairing. |
+| `POST /api/v1/agents/enroll` | Enrollment bearer token, bound Tailnet IP | `{hostId,osUser,socket}` → 201 `{agentId,credential}`. Atomically consumes the token. Invalid, expired and reused tokens return 401. |
+| `POST /api/v1/agents/{agentId}/revoke` | Admin, exact Origin, CSRF | 204. Revokes credential, invalidates cache and closes the matching active connection. |
+| `GET /ws/v1/agent` | Agent bearer credential, bound Tailnet IP | WebSocket subprotocol `tmux-agent.v1`. No browser Origin or cookie on machine requests. |
+
+Migration006 stores only hashed enrollment and connection secrets. Credential
+rotation is revoke followed by fresh enrollment. The Agent CLI stores the issued
+credential and bound profile in an owner-only file. It verifies HTTPS/WSS with
+system roots and hostname validation and refuses redirects. It runs as the
+profile OS user and uses its configured local tmux socket.
+
+The client sends a versioned `hello` with agent ID, OS, OS user, socket,
+tmux version and inventory capability. The hub responds with `hello.ack` and a
+server-assigned generation. A newer accepted generation replaces the old
+connection. Revoked or obsolete results cannot update the observation.
+`inventory.snapshot` is the only RPC in this slice. It carries a request ID,
+generation and deadline, and its correlated result contains bounded tmux
+inventory records. The hub parses those records with the shared inventory
+parser. The limits are eight concurrent handshakes, 32 active Agents, four
+concurrent snapshot calls globally and one per Agent. Agent never opens an
+inbound listener. Host status reflects the last explicit probe. PTY, write
+operations, heartbeat and automatic reconnect are scheduled for later slices.
 
 ## SSH observation slice (T10–T11)
 
 Host connection state is now derived from the last explicit observation. Listing
 profiles never opens SSH connections. Initial SSH reason is `credentials_required`;
-Agent remains `connector_pending`. `observedAt` is the last probe attempt, not
+Agent starts as `agent_offline`. `observedAt` is the last probe attempt, not
 evidence that a cached inventory is current. SSH metadata and options are admin-only.
 
 Configure SSH locally with `hub ssh-configure --host-id ID --key-file PATH

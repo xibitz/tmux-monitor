@@ -2,6 +2,7 @@ import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { TmuxRename } from "./TmuxRename";
+import { AgentSetup } from "./AgentSetup";
 import { TmuxLayoutMutation, TmuxLifecycle } from "./TmuxLifecycle";
 import { PaneSnapshotViewer } from "./PaneSnapshotViewer";
 import type { PaneSnapshotTarget } from "./PaneSnapshotViewer";
@@ -1079,13 +1080,15 @@ function HostBadge({ host }: { host: Host }) {
       ? "Siapkan SSH"
       : host.statusReason === "connector_pending"
         ? "Belum tersedia"
-        : online
-          ? "Terakhir terhubung"
-          : host.state === "ONLINE"
-            ? "Periksa ulang"
-            : host.state === "DEGRADED"
-              ? "Perlu diperiksa"
-              : "Belum terhubung";
+        : host.statusReason === "agent_disabled"
+          ? "Agent nonaktif"
+          : online
+            ? "Terakhir terhubung"
+            : host.state === "ONLINE"
+              ? "Periksa ulang"
+              : host.state === "DEGRADED"
+                ? "Perlu diperiksa"
+                : "Belum terhubung";
   return (
     <span className={`status-badge ${online ? "verified" : ""}`}>
       <span />
@@ -1436,13 +1439,46 @@ function HostDetails({
               </button>
             </section>
           ) : (
-            <div className="info-notice">
-              <CircleHelp size={17} />
-              <span>
-                Konektor Agent masih menunggu tahap implementasi berikutnya.
-                Tidak ada fallback otomatis ke SSH.
-              </span>
-            </div>
+            <section className="ssh-panel" aria-label="Koneksi Agent">
+              <div className="panel-heading">
+                <h3>Koneksi Agent</h3>
+              </div>
+              {canDelete && (
+                <AgentSetup
+                  key={host.id}
+                  host={host}
+                  busy={busy}
+                  onRevoked={() => {
+                    setInventory(undefined);
+                    setObservationError("");
+                    onUpdated({
+                      ...host,
+                      state: "UNREACHABLE",
+                      statusReason: "agent_offline",
+                      observedAt: null,
+                      stale: true,
+                    });
+                  }}
+                />
+              )}
+              {observationError && (
+                <ErrorNotice>{observationError}</ErrorNotice>
+              )}
+              <button
+                className="button secondary full"
+                disabled={busy}
+                onClick={inspect}
+              >
+                {busy ? (
+                  <LoaderCircle size={16} className="spin" />
+                ) : (
+                  <RefreshCw size={16} />
+                )}
+                {canDelete
+                  ? "Periksa koneksi dan inventaris"
+                  : "Muat inventaris"}
+              </button>
+            </section>
           )}
           {inventory && (
             <section className="inventory-panel" aria-label="Inventaris tmux">

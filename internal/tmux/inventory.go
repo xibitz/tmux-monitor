@@ -82,8 +82,20 @@ func SnapshotCommand(socket string) (string, error) {
 func EmptySnapshotCommand(socket string) (string, error) { return snapshotCommand(socket, true) }
 
 func snapshotCommand(socket string, empty bool) (string, error) {
+	args, err := SnapshotArgs(socket, empty)
+	if err != nil {
+		return "", err
+	}
+	for i := range args {
+		args[i] = ShellQuote(args[i])
+	}
+	return "LC_ALL=C " + strings.Join(args, " "), nil
+}
+
+// SnapshotArgs provides the same fixed catalog to the local Agent and SSH.
+func SnapshotArgs(socket string, empty bool) ([]string, error) {
 	if !socketName.MatchString(socket) {
-		return "", ErrInvalid
+		return nil, ErrInvalid
 	}
 	// display-message normalizes tabs when no session exists. Printable pipes
 	// keep the server fingerprint intact; path pipes are decoded separately.
@@ -96,10 +108,7 @@ func snapshotCommand(socket string, empty bool) (string, error) {
 	if empty {
 		args = []string{"tmux", "-L", socket, "display-message", "-p", fingerprint, ";", "list-sessions", "-F", "S\t#{session_id}\t#{q:session_name}\t#{session_created}", ";", "display-message", "-p", fingerprint}
 	}
-	for i := range args {
-		args[i] = ShellQuote(args[i])
-	}
-	return "LC_ALL=C " + strings.Join(args, " "), nil
+	return args, nil
 }
 
 func Empty(host, socket, version string) Inventory {

@@ -13,11 +13,51 @@ Ubah nama session SSH tersedia secara eksperimental dengan opt-in operator.
 
 **Terminal SSH tersedia secara eksperimental dan nonaktif secara default.**
 Viewer selalu dimulai read-only; input interaktif memerlukan izin dan aktivasi
-per viewer. Konektor Agent belum tersedia. Belum ada service
-worker, control mode, pairing agent, atau notifikasi. Gate rilis P0 belum lulus.
+per viewer. Pairing dan inventaris Agent tersedia di source sebagai fitur
+eksperimental yang belum diuji. Service worker, control mode dan notifikasi
+masih dijadwalkan. Gate rilis P0 belum lulus.
 
 Agent berikutnya mulai dari [MEMORY.md](MEMORY.md). Status setiap task dan gate
 berada di [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
+
+## Menyiapkan koneksi Agent
+
+Agent adalah binary Go yang berjalan di mesin tmux sebagai akun pemilik
+session. Ia membuka koneksi keluar ke hub melalui HTTPS Tailscale Serve.
+T22 mencakup pairing, cabut akses, dan inventaris read-only. Terminal Agent,
+mutasi tmux, heartbeat dan reconnect otomatis masih dijadwalkan.
+
+1. Jalankan hub dalam mode produksi HTTPS dengan Tailscale Serve yang meneruskan
+   ke listener localhost. Batasi akses dari mesin Agent melalui Tailscale Grants.
+   Aktifkan `TMUX_MONITOR_AGENT_ENABLED=true` dan `TMUX_MONITOR_DEV=false`.
+   Gunakan origin HTTPS dengan hostname Serve `.ts.net` dan jalankan hub dari
+   source terbaru. Backup SQLite sebelum naik ke schema006.
+2. Build binary Agent untuk Linux atau macOS target dengan
+   `go build -trimpath -o bin/agent ./cmd/agent`. Binary juga dihasilkan
+   oleh `make build`.
+3. Sebagai admin, buat profil **Agent** dengan akun OS dan socket tmux yang
+   tepat. Buka detail host, masukkan IP Tailscale mesin Agent yang terlihat
+   oleh Serve, lalu klik **Buat token pairing**. Token berlaku 10 menit
+   dan hanya dapat dipakai sekali.
+4. Pada mesin Agent, jalankan perintah berikut sebagai akun OS profil. Ganti
+   URL, ID dan socket sesuai detail profil. Masukkan token saat diminta.
+
+   ```sh
+   mkdir -p -m 700 "$HOME/.config/tmux-monitor"
+   ./bin/agent enroll \
+     --hub https://your-hub.your-tailnet.ts.net \
+     --host-id ID_PROFIL_AGENT \
+     --socket default \
+     --credential-file "$HOME/.config/tmux-monitor/agent.json"
+   ./bin/agent run --credential-file "$HOME/.config/tmux-monitor/agent.json"
+   ```
+
+5. Dari detail host, klik **Periksa koneksi dan inventaris**. Saat Agent terputus,
+   jalankan ulang `agent run`. Untuk rotasi credential atau pindah IP, klik
+   **Cabut identitas…** dan ulangi pairing dengan path file credential baru.
+
+T22 belum diuji. Hub memerlukan Serve yang mengganti header sumber, host dan
+protokol untuk permintaan Tailnet. [Source Tailscale Serve](https://github.com/tailscale/tailscale/blob/main/ipn/ipnlocal/serve.go)
 
 ## Ubah nama session SSH eksperimental
 
@@ -26,7 +66,7 @@ seperti langkah development, lalu restart hub dari source/build terbaru.
 Fitur ini memerlukan **tmux 3.8**, izin `tmux:read` + `tmux:write` (admin sudah
 memiliki izin), dan konfigurasi SSH terverifikasi. Terminal boleh tetap nonaktif.
 Source create/kill session sudah ditambahkan terpisah, tetapi belum diuji;
-lihat bagian di bawah. Operasi Agent belum tersedia.
+lihat bagian di bawah. Mutasi melalui Agent dijadwalkan terpisah.
 
 Periksa koneksi/inventaris pada detail host, klik **Ubah nama**, isi nama baru,
 centang konfirmasi dampak bersama, lalu **Simpan nama session**. Nama baru memakai
@@ -41,7 +81,7 @@ Catatan operasi persisten mencegah eksekusi ulang setelah restart hub, maksimal
 10000 catatan tanpa pembersihan otomatis. Jika batas tercapai, hub menolak operasi
 baru; jangan hapus catatan untuk memaksa retry hasil yang belum pasti.
 
-Source terbaru memakai **migrasi005**. Backup database sebelum upgrade. Downgrade ke
+Ledger create/kill memakai **migrasi005**. Backup database sebelum upgrade. Downgrade ke
 schema3 menghapus catatan operasi dan perlindungan idempotensi terkait; hindari
 downgrade saat ada hasil operasi yang belum pasti. `.env` tidak dimuat otomatis.
 

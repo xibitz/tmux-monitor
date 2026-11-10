@@ -10,6 +10,7 @@ web:
 
 build: web
 	go build -trimpath -o bin/hub ./cmd/hub
+	go build -trimpath -o bin/agent ./cmd/agent
 
 check:
 	@test -z "$$(gofmt -l cmd internal)" || (gofmt -l cmd internal; exit 1)
