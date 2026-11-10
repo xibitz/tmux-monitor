@@ -32,12 +32,12 @@ pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus
 | T33 | PARTIAL | Paket Darwin, lint plist, backup/restore SQLite+key dengan age dan rollback 008→007→008 lulus. Clean install systemd/launchd nyata terbuka. |
 | T34 | PARTIAL | Alat ukur lulus pada fixture HTTP 10 host/50 session dan status stale. Beberapa skenario gangguan lulus pada tmux lokal. Matriks dan kapasitas nyata terbuka. |
 | T40 | DONE | Fixture pemisahan blok, escaping/truncation, fuzz control mode, serta watcher pada tmux 3.8 lokal lulus. |
-| T41 | PARTIAL | Watcher SSH dan Agent tmux lokal, snapshot baru dan resync gap browser lulus. Matriks tmux dan tailnet nyata terbuka. |
+| T41 | PARTIAL | Watcher SSH dan Agent tmux lokal, snapshot baru, resync gap dan fallback polling browser lulus. Matriks tmux dan tailnet nyata terbuka. |
 | T42 | PARTIAL | Pesan fallback live pane dan pengamanan detach lulus di Chromium/SSH fixture. Streaming pane independen tetap nonaktif. |
 | T50 | DONE | Schema008, ACL, atribusi terverifikasi/fallback unknown, dedupe, retensi 200/host dan fence generation lulus di fixture. |
 | T51 | PARTIAL | Payload Codex dan Claude sintetis lulus melalui socket lokal, Agent WSS dan inbox. Eksekusi dari CLI nyata belum dikualifikasi. |
-| T52 | PARTIAL | Inbox tetap tersedia saat izin push ditolak di Chromium. Tes HTTP memeriksa ACL, VAPID, body kosong, cooldown dan endpoint kedaluwarsa. Pengiriman provider nyata terbuka. |
-| T60 | PARTIAL | Empat tab, kembali read-only, pencarian dan favorit lulus pada Chromium fixture. P95 30 perpindahan tercatat; RAM/CPU/bandwidth nyata dan tuning terbuka. |
+| T52 | PARTIAL | Inbox tetap tersedia saat izin ditolak atau Push API absen di Chromium. Tes HTTP memeriksa ACL, VAPID, body kosong, cooldown dan endpoint kedaluwarsa. Pengiriman provider nyata terbuka. |
+| T60 | PARTIAL | Empat tab, kembali read-only, pencarian dan favorit lulus pada Chromium fixture. P95 30 perpindahan 65–72 ms pada fixture; benchmark deployment dan tuning terbuka. |
 
 ### Checklist irisan T10–T11
 

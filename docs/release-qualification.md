@@ -42,6 +42,9 @@ tautan bukti, dan status `PASS`, `FAIL`, `BLOCKED`, atau `N/A` dengan alasan.
 
 ## Kapasitas dan pemulihan
 
+Jalankan `python3 scripts/qualify-capacity.py` untuk memeriksa pelaporan
+pada fixture HTTP lokal 10 host/50 session dan simulasi stale.
+
 Gunakan akun lab yang memiliki izin baca pada tepat 10 profil. Script hanya
 membuat dan menutup sesi login sendiri serta meminta daftar host dan inventaris.
 Password diminta tanpa echo. Output JSON berisi hitungan dan timing agregat,
@@ -104,4 +107,6 @@ Tetapkan `PLAYWRIGHT_MODULE` jika modul berada di direktori terpisah dan
 `PLAYWRIGHT_CHROMIUM_EXECUTABLE` bila memakai executable tertentu. Runner
 membuka server HTTPS fixture pada port 18081 dengan sertifikat sementara,
 kemudian menutupnya setelah pengujian. Uji ini memakai SSH/terminal
-simulasi dan viewport 393×852. Hasil timing tab adalah baseline UI lokal.
+simulasi dan viewport 393×852. Runner mengeluarkan P95 perpindahan tab,
+waktu task renderer, sampel heap JS, dan jumlah byte frame terminal sebagai
+baseline UI lokal.

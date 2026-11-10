@@ -899,7 +899,9 @@ database, TLS, akun, key, sesi, socket tmux dan profil browser pengujian
 terisolasi. Runtime, data dan konfigurasi pribadi tetap di luar fixture.
 
 - `make build`, `make check`, `make test` (race detector Go dan 13 tes web),
-  `make package`, serta spike dua klien tmux lokal lulus.
+  `make package`, serta spike dua klien tmux lokal lulus. CI Linux untuk
+  `bc9aebb` lulus. [GitHub Actions](https://github.com/xibitz/tmux-monitor/actions/runs/42758596904)
+  Regresi service worker pada follow-up membuat total tes web menjadi 14.
 - Perbaikan build: pakai satu validator epoch di protokol Agent dan hapus
   impor Go yang tidak dipakai. Guard attach SSH/Agent dan watcher sekarang
   menolak kebijakan tmux yang dapat mengakhiri session/server saat detach.
@@ -920,8 +922,12 @@ terisolasi. Runtime, data dan konfigurasi pribadi tetap di luar fixture.
 - T30/T42/T52/T60: Chromium headless 156, viewport 393×852, memeriksa
   manifest, shell offline, 7 entri cache publik, fullscreen fallback, gap
   sequence, alasan live pane nonaktif, favorit, pencarian dan empat tab.
-  30 perpindahan tab pada fixture memberi P95 awal 66 ms. Web Push ditolak
-  secara sintetis dan inbox tetap terlihat. Reproduksi di
+  Regresi lanjutan juga membuktikan polling saat stream diam, dan inbox
+  tetap tersedia saat izin push ditolak atau Push API tidak tersedia.
+  Tiga pengukuran 30 perpindahan tab memberi P95 65–72 ms. Pada pengukuran
+  terakhir, renderer menghabiskan 491 ms TaskDuration, heap JS 9,75→15,45 MB
+  dan frame terminal yang diterima 14.880 byte. Nilai heap sekali ukur
+  dipengaruhi GC. Ini baseline fixture UI. Reproduksi di
   `scripts/qualify-browser.sh` dengan Playwright dan Chromium.
 - T33: `make package` Darwin arm64, lint plist dan `scripts/qualify-backup.sh`
   lulus pada age 1.3.2. Backup dan restore mencakup SQLite dan key SSH asli
@@ -931,15 +937,18 @@ terisolasi. Runtime, data dan konfigurasi pribadi tetap di luar fixture.
 - T34: alat ukur menghasilkan 20/20 putaran lengkap dan 200/200 permintaan
   inventaris pada fixture HTTP sintetis 5 profil SSH + 5 profil Agent × 5
   session. Pada skenario stale, 2 stale dilaporkan dan dua putaran tidak
-  dihitung lengkap. Angka timing fixture bukan performa deployment.
+  dihitung lengkap. Jalankan ulang dengan `python3 scripts/qualify-capacity.py`.
+  Angka timing fixture bukan performa deployment.
 - T50–T52: payload hook sintetis melewati socket lokal dan WSS, kemudian
   inbox menerima dedupe, lokasi terverifikasi atau unknown. Fixture database
   membuktikan retensi 200/host dan menolak generation lama. Transport push
   simulasi membuktikan ACL, signature VAPID, body kosong, cooldown dan
-  penghapusan langganan yang berakhir. Provider publik belum dipakai.
+  penghapusan langganan yang berakhir. Fixture Claude meliputi Notification,
+  Stop dan StopFailure. Uji service worker memeriksa pesan tetap dan tautan
+  inbox se-origin walau event memuat data tak terduga. Provider publik belum dipakai.
 
-Titik lanjut bila jendela berganti: jalankan ulang fixture yang belum
-diverifikasi terhadap commit terkini dan cek hasil GitHub Actions. Gate
+Titik lanjut bila jendela berganti: cek hasil GitHub Actions untuk commit
+terbaru, lalu gunakan fixture reproduksi bila ada regresi. Gate
 tersisa membutuhkan staging Serve/Grants dengan host khusus, Android dan
 iOS fisik, CLI Codex/Claude nyata dengan profil uji, provider push publik,
 clean install service Linux/macOS dan benchmark RAM/CPU/bandwidth saat

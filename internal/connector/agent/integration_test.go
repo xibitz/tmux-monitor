@@ -308,6 +308,16 @@ func TestAgentEndToEndWithIsolatedTmux(t *testing.T) {
 		t.Fatal(err)
 	}
 	wait(func() bool { return strings.Contains(notices(), `"kind":"error"`) })
+	for _, hook := range []struct{ payload, kind string }{
+		{`{"hook_event_name":"Notification","message":"private-fixture-marker"}`, "attention_required"},
+		{`{"hook_event_name":"Stop","last_assistant_message":"private-fixture-marker"}`, "turn_completed"},
+	} {
+		time.Sleep(600 * time.Millisecond)
+		if err := NotifyHook(ctx, claude, strings.NewReader(hook.payload)); err != nil {
+			t.Fatal(err)
+		}
+		wait(func() bool { return strings.Contains(notices(), `"source":"claude","kind":"`+hook.kind+`"`) })
+	}
 	inbox := notices()
 	if strings.Count(inbox, `"source":"codex"`) != 1 || !strings.Contains(inbox, `"confidence":"unknown"`) || strings.Contains(inbox, "private-fixture-marker") {
 		t.Fatalf("unexpected fixture inbox: %s", inbox)

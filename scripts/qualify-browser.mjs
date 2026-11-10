@@ -25,6 +25,19 @@ try {
   });
   const page = await context.newPage();
   page.setDefaultTimeout(8_000);
+  const cdp = await context.newCDPSession(page);
+  await cdp.send("Performance.enable");
+  async function browserMetrics() {
+    const { metrics } = await cdp.send("Performance.getMetrics");
+    return Object.fromEntries(metrics.map(({ name, value }) => [name, value]));
+  }
+  let terminalBytes = 0;
+  page.on("websocket", (socket) => {
+    if (new URL(socket.url()).pathname !== "/ws/v1/terminal") return;
+    socket.on("framereceived", ({ payload }) => {
+      terminalBytes += Buffer.byteLength(payload);
+    });
+  });
   const uncaught = [];
   page.on("pageerror", (e) => uncaught.push(e.message));
   let snapshotRequests = 0;
@@ -138,6 +151,8 @@ try {
     await readOnly();
     await page.getByText("Read-only", { exact: true }).waitFor();
   }
+  const beforeSwitches = await browserMetrics();
+  const bytesBeforeSwitches = terminalBytes;
   const timings = [];
   for (let i = 0; i < 30; i++) {
     const started = performance.now();
@@ -147,6 +162,12 @@ try {
     await page.getByText("Read-only", { exact: true }).waitFor();
     timings.push(performance.now() - started);
   }
+  const afterSwitches = await browserMetrics();
+  const switchTerminalBytes = terminalBytes - bytesBeforeSwitches;
+  assert.ok(
+    switchTerminalBytes > 0,
+    "fixture viewer received no terminal frames",
+  );
   await tabs.getByRole("button", { name: "Inventaris" }).click();
   assert.ok(await sessionOpen("fixture-4").isDisabled());
   const beforePolling = snapshotRequests;
@@ -216,6 +237,12 @@ try {
       cachePaths: cachePaths.length,
       tabSwitches: timings.length,
       tabSwitchP95Ms: Math.round(timings[Math.ceil(timings.length * 0.95) - 1]),
+      rendererTaskMs: Math.round(
+        (afterSwitches.TaskDuration - beforeSwitches.TaskDuration) * 1000,
+      ),
+      rendererHeapBeforeBytes: beforeSwitches.JSHeapUsedSize,
+      rendererHeapAfterBytes: afterSwitches.JSHeapUsedSize,
+      switchTerminalBytes,
     }),
   );
 } finally {
