@@ -12,20 +12,21 @@ func (m *Manager) CreateSession(ctx context.Context, h Host, record Record, r tm
 	if !tmux.ValidCreateSession(r) {
 		return "", fail("invalid_request")
 	}
-	return m.executeSessionLifecycle(ctx, h, record, "", true, func(output []byte) (string, error) { return tmux.CreateSessionCommand(h.ID, h.Socket, r, output) }, authorize)
+	return m.executeGuardedMutation(ctx, h, record, "", "", func(output []byte) (string, error) { return tmux.CreateSessionCommand(h.ID, h.Socket, r, output) }, authorize)
 }
 func (m *Manager) KillSession(ctx context.Context, h Host, record Record, session string, r tmux.KillSessionRequest, authorize func(context.Context) error) (string, error) {
 	if !tmux.ValidKillSession(session, r) {
 		return "", fail("invalid_request")
 	}
-	return m.executeSessionLifecycle(ctx, h, record, session, false, func(output []byte) (string, error) {
+	return m.executeGuardedMutation(ctx, h, record, session, "MTM_KILLED\n", func(output []byte) (string, error) {
 		return tmux.KillSessionCommand(h.ID, h.Socket, session, r, output)
 	}, authorize)
 }
 
 // Kept separate from the verified rename implementation until lifecycle tests
 // qualify these new catalogs. All operations share the same bounded host gate.
-func (m *Manager) executeSessionLifecycle(ctx context.Context, h Host, record Record, target string, creating bool, catalog func([]byte) (string, error), authorize func(context.Context) error) (string, error) {
+func (m *Manager) executeGuardedMutation(ctx context.Context, h Host, record Record, target, successMarker string, catalog func([]byte) (string, error), authorize func(context.Context) error) (string, error) {
+	creating := target == ""
 	if authorize == nil {
 		return "", fail("invalid_request")
 	}
@@ -91,6 +92,8 @@ func (m *Manager) executeSessionLifecycle(ctx context.Context, h Host, record Re
 			return "", fail("mutation_limit")
 		case errors.Is(err, tmux.ErrLifecycleDuplicate):
 			return "", fail("duplicate_name")
+		case errors.Is(err, tmux.ErrWindowLinked):
+			return "", fail("window_linked")
 		case errors.Is(err, tmux.ErrLifecycleUnsupported):
 			return "", fail("tmux_unsupported")
 		default:
@@ -117,7 +120,7 @@ func (m *Manager) executeSessionLifecycle(ctx context.Context, h Host, record Re
 		}
 		return id, nil
 	}
-	if string(output) != "MTM_KILLED\n" {
+	if string(output) != successMarker {
 		return "", fail("operation_uncertain")
 	}
 	return target, nil

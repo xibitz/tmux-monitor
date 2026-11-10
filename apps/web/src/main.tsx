@@ -1,7 +1,7 @@
 import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { SessionRename } from "./SessionRename";
+import { TmuxRename } from "./TmuxRename";
 import { SessionLifecycle } from "./SessionLifecycle";
 import { PaneSnapshotViewer } from "./PaneSnapshotViewer";
 import type { PaneSnapshotTarget } from "./PaneSnapshotViewer";
@@ -1118,20 +1118,26 @@ function HostDetails({
   const [paneSnapshotTarget, setPaneSnapshotTarget] =
     useState<PaneSnapshotTarget>();
   const [canRename, setCanRename] = useState(false);
+  const [canRenameWindow, setCanRenameWindow] = useState(false);
   const [canCreate, setCanCreate] = useState(false);
   const [canKill, setCanKill] = useState(false);
   useEffect(() => {
     let active = true;
     setCanRename(false);
+    setCanRenameWindow(false);
     setCanCreate(false);
     setCanKill(false);
     if (host.transport === "ssh")
-      void api<{ canRename: boolean; canCreate?: boolean; canKill?: boolean }>(
-        `/hosts/${encodeURIComponent(host.id)}/session-options`,
-      )
+      void api<{
+        canRename: boolean;
+        canCreate?: boolean;
+        canKill?: boolean;
+        canRenameWindow?: boolean;
+      }>(`/hosts/${encodeURIComponent(host.id)}/session-options`)
         .then((options) => {
           if (active) {
             setCanRename(options.canRename);
+            setCanRenameWindow(options.canRenameWindow === true);
             setCanCreate(options.canCreate === true);
             setCanKill(options.canKill === true);
           }
@@ -1233,6 +1239,14 @@ function HostDetails({
   }
   const selectedPaneSnapshot =
     paneSnapshotTarget?.hostId === host.id ? paneSnapshotTarget : undefined;
+  const windowLinks = new Map<string, number>();
+  if (canRenameWindow && inventory?.hostId === host.id) {
+    for (const session of inventory.sessions) {
+      for (const window of session.windows) {
+        windowLinks.set(window.id, (windowLinks.get(window.id) ?? 0) + 1);
+      }
+    }
+  }
   return (
     <Modal
       title={confirm ? "Hapus profil host?" : host.label}
@@ -1413,7 +1427,7 @@ function HostDetails({
                   inventaris terakhir; data ini sudah stale.
                 </div>
               )}
-              {(canRename || canCreate || canKill) &&
+              {(canRename || canCreate || canKill || canRenameWindow) &&
                 inventory.capabilities.tmuxVersion !== "3.8" && (
                   <p className="panel-description">
                     Pengelolaan session memerlukan tmux 3.8.
@@ -1472,10 +1486,15 @@ function HostDetails({
                         )}
                       </div>
                       {canRename && session.renameRevision && (
-                        <SessionRename
+                        <TmuxRename
                           key={inventory.observedAt + session.id}
                           hostId={host.id}
-                          session={session}
+                          target={{
+                            kind: "session",
+                            id: session.id,
+                            name: session.name,
+                            revision: session.renameRevision,
+                          }}
                           epoch={inventory.epoch}
                           disabled={
                             inventory.stale ||
@@ -1519,6 +1538,32 @@ function HostDetails({
                                 <span className="active-label">aktif</span>
                               )}
                             </div>
+                            {canRenameWindow &&
+                              windowLinks.get(window.id) === 1 &&
+                              window.revision && (
+                                <TmuxRename
+                                  key={inventory.observedAt + window.revision}
+                                  hostId={host.id}
+                                  target={{
+                                    kind: "window",
+                                    id: window.id,
+                                    name: window.name,
+                                    revision: window.revision,
+                                    sessionId: session.id,
+                                  }}
+                                  epoch={inventory.epoch}
+                                  disabled={
+                                    busy ||
+                                    inventory.stale ||
+                                    !inventory.epoch ||
+                                    inventory.capabilities.tmuxVersion !== "3.8"
+                                  }
+                                  onRefresh={() => {
+                                    setInventory(undefined);
+                                    void inspect();
+                                  }}
+                                />
+                              )}
                             <ul>
                               {window.panes.map((pane) => (
                                 <li className="pane-row" key={pane.id}>

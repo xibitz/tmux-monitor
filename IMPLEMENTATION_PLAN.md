@@ -22,7 +22,7 @@ pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus
 | T12 | PARTIAL | Terminal eksperimental: default read-only, aktivasi interactive dengan izin/tiket baru, input bersequence/rate limit, PTY raw, Unicode/control dan revoke/no-replay tests. Gate perangkat/akses nyata masih terbuka. |
 | T13 | PARTIAL | Heartbeat v2 + ping/pong, deadline browser/input, offline/pagehide, mode-response fence dan reopen read-only tanpa replay tersedia. Uji idle/timeout/sequence/restart hub terisolasi dan browser fixture lulus. Network switch/sleep/perangkat nyata tetap terbuka. |
 | T20 | PARTIAL | Rename baseline99c0791 teruji. Source create/kill + createRevision/guard subtree, konfirmasi ID, izin kill, flag lifecycle default-off dan migrasi005 ditambahkan **BELUM DIUJI** atas permintaan pengguna. Agent parity belum. |
-| T21 | PARTIAL | Source snapshot pane SSH read-only dengan guard target, batas output dan UI tersedia **BELUM DIUJI**. Mutasi window/pane dan paritas Agent belum. |
+| T21 | PARTIAL | Source snapshot pane SSH dan ubah nama window satu tautan tersedia **BELUM DIUJI**. Create/kill window, split/kill pane dan paritas Agent masih terbuka. |
 | T22 | TODO | Enrollment/revoke Agent, credential, handshake/generation dan RPC. |
 | T23 | TODO | PTY Agent dan paritas mode terminal. |
 | T24 | TODO | Heartbeat, reconnect/jitter, capability refresh dan rekonsiliasi. |
@@ -132,7 +132,9 @@ browser dan CI belum dijalankan.
   pilihan aktif atau paste buffer, batas256KiB/64KiB dan UTF-8/truncation.
 - [ ] Uji redaksi audit/log, no-store, hasil terlambat setelah close/pagehide dan
   tampilan ponsel. Uji hanya bila pengguna mengizinkan kembali.
-- [ ] Lanjutkan mutasi window/pane dan paritas Agent.
+- [ ] Kualifikasi ubah nama window SSH. Source memakai revision inventaris,
+  guard window/pane, izin write, konfirmasi dan ledger operasi.
+- [ ] Lanjutkan create/kill window, split/kill pane dan paritas Agent.
 
 | Tahap | Prioritas | Hasil yang dapat didemokan | Gate keluar |
 |---|---:|---|---|

@@ -35,6 +35,8 @@ telah ditambahkan di belakang flag baru default-off; **belum diuji atau dikompil
 Migrasi005 juga belum diuji; database/runtime pengguna belum diupgrade.
 Source snapshot pane SSH read-only kini tersedia dengan flag terpisah default-off.
 Belum diuji; tidak ada perubahan schema untuk irisan ini.
+Source ubah nama window SSH tersedia dengan flag default-off dan lingkup window
+satu tautan. Statusnya belum diuji.
 
 Baseline sebelum irisan T12: `33466f0` (SSH/inventaris); dokumentasi awal handoff:
 `b7b8c1c`. Sebelumnya `1d8c1cf` (UX allowlist), `5c99762` (fondasi), `a879f8c`
@@ -638,6 +640,31 @@ diff dilakukan tanpa menyentuh `.env`, `.data`, host, atau proses pengguna.
    Window/pane mutations dan Agent parity belum. Source `02677dc` sudah dipush
    melalui SSH dengan `[skip ci]`; tidak ada hasil uji/CI baru yang diklaim.
 
+## Checkpoint T21 ubah nama window (10 November)
+
+Baseline `81089f0`. Status **BELUM DIUJI** sesuai instruksi pengguna. Pekerjaan
+meliputi perubahan source, formatting dan review diff. Push memakai `[skip ci]`.
+
+1. `PATCH /hosts/{id}/windows/{wid}` memakai Origin, CSRF, login, izin read/write
+   dan kunci idempotensi. Body memakai session ID, nama baru, epoch, revision
+   window dan konfirmasi. Flag `TMUX_MONITOR_WINDOW_MUTATIONS_ENABLED` default
+   nonaktif dan bekerja bersama flag mutasi.
+2. `internal/tmux/window_rename.go` memakai inventaris SSH baru dan guard antrean
+   tmux 3.8. Target eksplisit memakai session ID dan window ID. Guard memeriksa
+   fingerprint, nama, indeks, status aktif, pane, jumlah window dan duplikasi
+   nama. Window dengan beberapa tautan ditolak. tmux menonaktifkan penamaan
+   otomatis ketika rename berhasil.
+3. Jalur SSH memakai ulang dispatch dengan marker hasil. Jalur HTTP memakai
+   ulang ledger schema005 dan mengembalikan `windowId`. Audit menyimpan metadata
+   operasi. Hasil ambigu memerlukan pemeriksaan inventaris sebelum permintaan baru.
+4. `TmuxRename.tsx` dipakai untuk form rename session dan window. Tombol window
+   tampil untuk window satu tautan dalam inventaris SSH. Scope ini dipilih untuk
+   membatasi dampak lintas session.
+5. Kualifikasi tertunda meliputi compile/build, regresi rename session dan
+   lifecycle, guard tautan/duplikasi/revision pada tmux aktual, ledger/replay,
+   izin, dan UI. T21 tetap PARTIAL. Berikutnya create/kill window, split/kill
+   pane dan paritas Agent.
+
 ## Titik lanjut tepat
 
 1. Baca hasil CI/commit checkpoint interactive terbaru. Cek git status dan
@@ -655,7 +682,7 @@ diff dilakukan tanpa menyentuh `.env`, `.data`, host, atau proses pengguna.
 5. T20: source create/kill sekarang tersedia tetapi belum diuji. Tetap ikuti
    instruksi no-testing pengguna. Kualifikasi checklist di atas hanya bila
    pengguna mengizinkan testing kembali; jangan menandai selesai dari review
-   source. T21 snapshot sudah ditulis; berikutnya kontrak mutasi window/pane
+   source. T21 snapshot dan rename window sudah ditulis. Berikutnya operasi window/pane lain
    tanpa menjalankan operasi nyata. Tidak ada raw-shell/
    kill-server API; ledger pending harus tetap retained setelah restart.
 6. Ikuti aturan implementasi di atas; perbarui memory/tasklist/CI dan push SSH.

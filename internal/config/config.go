@@ -17,6 +17,7 @@ type Config struct {
 	TerminalEnabled         bool
 	PaneSnapshotEnabled     bool
 	MutationsEnabled        bool
+	WindowMutationsEnabled  bool
 	SessionLifecycleEnabled bool
 	AllowedSSHHosts         map[string]bool
 }
@@ -48,6 +49,10 @@ func Load() (Config, error) {
 	c.SessionLifecycleEnabled, err = strconv.ParseBool(env("TMUX_MONITOR_SESSION_LIFECYCLE_ENABLED", "false"))
 	if err != nil {
 		return c, fmt.Errorf("TMUX_MONITOR_SESSION_LIFECYCLE_ENABLED must be true or false")
+	}
+	c.WindowMutationsEnabled, err = strconv.ParseBool(env("TMUX_MONITOR_WINDOW_MUTATIONS_ENABLED", "false"))
+	if err != nil {
+		return c, fmt.Errorf("TMUX_MONITOR_WINDOW_MUTATIONS_ENABLED must be true or false")
 	}
 	return c, c.Validate()
 }

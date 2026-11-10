@@ -170,6 +170,26 @@ request names are persisted. Downgrade5→4 discards create result IDs and there
 must not be used to recover/retry unknown operations. UI requires fresh inventory
 after failure and never retries automatically. No change is made to runtime/.env.
 
+## Experimental window rename (T21, source only)
+
+`PATCH /api/v1/hosts/{id}/windows/{wid}` requires the mutations flag and
+`TMUX_MONITOR_WINDOW_MUTATIONS_ENABLED=true`. The window flag defaults to false.
+Session options expose `canRenameWindow` for callers with read and write access.
+Login, exact Origin, CSRF and a 32-hex `Idempotency-Key` are required.
+
+Send `{sessionId,name,epoch,revision,confirmed:true}` from fresh SSH inventory.
+Use native session and window IDs and the revision of that window in the selected
+session. The name follows the session rename character rules. This slice accepts
+tmux 3.8 windows with a single link. Names must be unique within the session.
+tmux disables automatic renaming for the renamed window.
+
+Fresh inventory and the final tmux guard check the server, session, window and
+pane state. The guard also checks for a new link or a duplicate sibling name.
+Success returns 200 with `{operationId,state:"succeeded",windowId}`. The existing
+operation ledger persists intent and outcome and revalidates SSH access before
+dispatch. Pending or ambiguous results are reconciled through inventory. The
+operation uses the current schema. Build, tests, browser checks and CI are pending.
+
 ## Experimental pane snapshot (T21, source only; untested)
 
 `TMUX_MONITOR_PANE_SNAPSHOT_ENABLED` defaults to false and is independent of the

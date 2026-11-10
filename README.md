@@ -73,6 +73,17 @@ metadata tersebut dan bukan cara untuk mengulang operasi. Batas guard64 item
 per koleksi dan command64KiB; target lebih besar ditolak. Seluruh perilaku baru
 ini masih perlu dikualifikasi saat testing kembali diminta.
 
+## Ubah nama window SSH
+
+Source ubah nama window tersedia untuk tmux 3.8. Fitur eksperimental ini memakai
+`TMUX_MONITOR_WINDOW_MUTATIONS_ENABLED` bersama flag mutasi dan memerlukan izin
+`tmux:read` serta `tmux:write`. Kedua flag default nonaktif.
+
+Dari inventaris SSH, pilih **Ubah nama window** pada window dengan satu tautan,
+isi nama baru, lalu konfirmasi. Nama harus unik dalam session. tmux menonaktifkan
+penamaan otomatis untuk window yang diubah. Periksa inventaris jika hasil operasi
+belum pasti. Implementasi ini berstatus belum diuji.
+
 ## Snapshot pane SSH — kode belum diuji
 
 Snapshot menampilkan teks dari satu pane tanpa membuka terminal interaktif,

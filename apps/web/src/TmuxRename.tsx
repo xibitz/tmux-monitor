@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
 
-export function SessionRename({
+export function TmuxRename({
   hostId,
-  session,
+  target,
   epoch,
   disabled,
   onRefresh,
 }: {
   hostId: string;
-  session: { id: string; name: string; renameRevision: string };
+  target: { id: string; name: string; revision: string } & (
+    { kind: "session" } | { kind: "window"; sessionId: string }
+  );
   epoch: string;
   disabled: boolean;
   onRefresh: () => void;
@@ -47,10 +49,17 @@ export function SessionRename({
     setError("");
     try {
       const key = crypto.randomUUID().replaceAll("-", "");
+      const resource = target.kind === "window" ? "windows" : "sessions";
       await api(
-        `/hosts/${encodeURIComponent(hostId)}/sessions/${encodeURIComponent(session.id)}`,
+        `/hosts/${encodeURIComponent(hostId)}/${resource}/${encodeURIComponent(target.id)}`,
         "PATCH",
-        { name, epoch, revision: session.renameRevision, confirmed: true },
+        {
+          name,
+          epoch,
+          revision: target.revision,
+          confirmed: true,
+          ...(target.kind === "window" ? { sessionId: target.sessionId } : {}),
+        },
         key,
       );
       if (alive.current) onRefresh();
@@ -69,25 +78,34 @@ export function SessionRename({
       <button
         type="button"
         className="button secondary"
+        aria-label={
+          target.kind === "window" && !attempted
+            ? `Ubah nama window ${target.name}`
+            : undefined
+        }
         disabled={disabled || busy}
         onClick={() => (attempted ? onRefresh() : setOpen(true))}
       >
-        {attempted ? "Periksa hasil ubah nama" : "Ubah nama"}
+        {attempted
+          ? "Periksa hasil ubah nama"
+          : target.kind === "window"
+            ? "Ubah nama window"
+            : "Ubah nama"}
       </button>
     );
   return (
     <section
       className="session-rename"
-      aria-label={`Ubah nama ${session.name}`}
+      aria-label={`Ubah nama ${target.kind} ${target.name}`}
     >
       <p>
-        Ubah nama session <strong>{session.name}</strong> ({session.id}).
+        Ubah nama {target.kind} <strong>{target.name}</strong> ({target.id}).
         Perubahan terlihat oleh semua klien pada host ini.
       </p>
       {!attempted && (
         <>
           <label>
-            Nama session baru
+            Nama {target.kind} baru
             <input
               ref={input}
               value={name}
@@ -152,7 +170,7 @@ export function SessionRename({
             }
             onClick={() => void submit()}
           >
-            Simpan nama session
+            Simpan nama {target.kind}
           </button>
         )}
       </div>

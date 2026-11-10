@@ -105,9 +105,16 @@ func identityGuard(s Session) string {
 	return guardAll(guardField("session_id", s.ID), guardField("session_created", strconv.FormatInt(s.CreatedAt, 10)), guardField("session_name", s.Name))
 }
 func serializeLifecycle(socket, target, condition, branch string) (string, error) {
+	if target != "" {
+		target += ":"
+	}
+	return serializeGuardedCommand(socket, target, condition, branch)
+}
+
+func serializeGuardedCommand(socket, target, condition, branch string) (string, error) {
 	args := []string{"tmux", "-N", "-L", socket, "if-shell", "-F"}
 	if target != "" {
-		args = append(args, "-t", target+":")
+		args = append(args, "-t", target)
 	}
 	args = append(args, condition, branch, "display-message -p MTM_CONFLICT")
 	for i := range args {
@@ -183,21 +190,11 @@ func KillSessionCommand(host, socket, session string, r KillSessionRequest, outp
 	checks := []string{serverGuard(fields), identityGuard(*selected), guardCount("W", len(selected.Windows))}
 	size := 0
 	for _, window := range selected.Windows {
-		if len(window.Panes) > MaxLifecycleItems {
-			return "", ErrLifecycleLimit
+		state, err := windowStateGuard(window)
+		if err != nil {
+			return "", err
 		}
-		windowChecks := []string{guardField("window_id", window.ID), guardField("window_name", window.Name), guardField("window_index", strconv.Itoa(window.Index)), guardField("window_active", boolText(window.Active)), guardCount("P", len(window.Panes))}
-		windowSize := 0
-		for _, pane := range window.Panes {
-			p := guardAll(guardField("pane_id", pane.ID), guardField("pane_active", boolText(pane.Active)), guardField("pane_width", strconv.Itoa(pane.Width)), guardField("pane_height", strconv.Itoa(pane.Height)), guardField("pane_current_command", pane.Command))
-			check := guardMatch("P", "pane_id", pane.ID, p)
-			windowSize += len(check)
-			if windowSize > MaxLifecycleCommand {
-				return "", ErrLifecycleLimit
-			}
-			windowChecks = append(windowChecks, check)
-		}
-		check := guardMatch("W", "window_id", window.ID, guardAll(windowChecks...))
+		check := guardMatch("W", "window_id", window.ID, state)
 		size += len(check)
 		if size > MaxLifecycleCommand {
 			return "", ErrLifecycleLimit
@@ -206,6 +203,30 @@ func KillSessionCommand(host, socket, session string, r KillSessionRequest, outp
 	}
 	branch := "kill-session -t '" + session + "' ; display-message -p MTM_KILLED"
 	return serializeLifecycle(socket, session, guardAll(checks...), branch)
+}
+
+func windowStateGuard(window Window) (string, error) {
+	if len(window.Panes) > MaxLifecycleItems {
+		return "", ErrLifecycleLimit
+	}
+	checks := []string{
+		guardField("window_id", window.ID), guardField("window_name", window.Name),
+		guardField("window_index", strconv.Itoa(window.Index)), guardField("window_active", boolText(window.Active)),
+		guardCount("P", len(window.Panes)),
+	}
+	size := 0
+	for _, pane := range window.Panes {
+		state := guardAll(guardField("pane_id", pane.ID), guardField("pane_active", boolText(pane.Active)),
+			guardField("pane_width", strconv.Itoa(pane.Width)), guardField("pane_height", strconv.Itoa(pane.Height)),
+			guardField("pane_current_command", pane.Command))
+		check := guardMatch("P", "pane_id", pane.ID, state)
+		size += len(check)
+		if size > MaxLifecycleCommand {
+			return "", ErrLifecycleLimit
+		}
+		checks = append(checks, check)
+	}
+	return guardAll(checks...), nil
 }
 
 func CreatedSessionID(output []byte) (string, error) {

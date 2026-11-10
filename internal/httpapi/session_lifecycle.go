@@ -81,9 +81,21 @@ func (s *Server) killSession(w http.ResponseWriter, r *http.Request) {
 	s.executeLifecycleRequest(w, r, "tmux.session.kill", "tmux:kill", body.Epoch, sid, body, 200, execute)
 }
 
-// This new path preserves the verified rename handler. Do not qualify it until
-// its schema005/replay/permissions/remote-command matrix has been run.
+// Reserve the operation before dispatch and persist its acknowledged result.
 func (s *Server) executeLifecycleRequest(w http.ResponseWriter, r *http.Request, action, permission, epoch, target string, body any, successStatus int, execute lifecycleExecute) {
+	windowRename := action == windowRenameAction
+	validResult := func(result string) bool {
+		if windowRename {
+			return tmux.ValidWindowID(result) && result == target
+		}
+		return tmux.ValidSessionID(result)
+	}
+	respond := func(status int, code, op, result string) {
+		if code == "success" && !validResult(result) {
+			status, code, result = 409, "operation_uncertain", ""
+		}
+		s.lifecycleResponse(w, r, status, code, op, result, windowRename)
+	}
 	h, record, err := s.lifecycleAccess(r.Context(), user(r), r.PathValue("id"), permission)
 	if err != nil {
 		s.fail(w, r, 404, "not_found", "Host SSH tidak tersedia atau tidak diizinkan.")
@@ -103,14 +115,14 @@ func (s *Server) executeLifecycleRequest(w http.ResponseWriter, r *http.Request,
 	err = tx.QueryRowContext(r.Context(), `SELECT operation_id,request_hash,state,result_code,status_code,result_target FROM tmux_operations WHERE actor_id=? AND key_hash=?`, user(r).ID, keyHash).Scan(&op, &previous, &state, &code, &status, &resultTarget)
 	if err == nil {
 		if previous != hash {
-			s.lifecycleResponse(w, r, 409, "idempotency_conflict", op, "")
+			respond(409, "idempotency_conflict", op, "")
 			return
 		}
 		if state != "done" {
-			s.lifecycleResponse(w, r, 409, "operation_uncertain", op, "")
+			respond(409, "operation_uncertain", op, "")
 			return
 		}
-		s.lifecycleResponse(w, r, status, code, op, resultTarget)
+		respond(status, code, op, resultTarget)
 		return
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
@@ -123,7 +135,7 @@ func (s *Server) executeLifecycleRequest(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	if count >= 10000 {
-		s.lifecycleResponse(w, r, 429, "operation_limit", "", "")
+		respond(429, "operation_limit", "", "")
 		return
 	}
 	op = storage.ID("op_")
@@ -166,8 +178,11 @@ func (s *Server) executeLifecycleRequest(w http.ResponseWriter, r *http.Request,
 		if code == "mutation_limit" {
 			status = 422
 		}
+		if code == "window_linked" {
+			status = 409
+		}
 	}
-	if err == nil && !tmux.ValidSessionID(resultTarget) {
+	if err == nil && !validResult(resultTarget) {
 		status, code, resultTarget = 409, "operation_uncertain", ""
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -190,20 +205,33 @@ func (s *Server) executeLifecycleRequest(w http.ResponseWriter, r *http.Request,
 	if err != nil {
 		status, code, resultTarget = 409, "operation_uncertain", ""
 	}
-	s.lifecycleResponse(w, r, status, code, op, resultTarget)
+	respond(status, code, op, resultTarget)
 }
 
-func (s *Server) lifecycleResponse(w http.ResponseWriter, r *http.Request, status int, code, op, target string) {
+func (s *Server) lifecycleResponse(w http.ResponseWriter, r *http.Request, status int, code, op, target string, windowRename bool) {
 	if op != "" {
 		w.Header().Set("X-Operation-ID", op)
 	}
 	if code == "success" && (status == 200 || status == 201) {
-		if !tmux.ValidSessionID(target) {
-			s.fail(w, r, 409, "operation_uncertain", "Target hasil operasi belum dapat diverifikasi. Periksa inventaris tanpa mengirim ulang operasi.")
+		field := "sessionId"
+		if windowRename {
+			field = "windowId"
+		}
+		s.json(w, status, map[string]string{"operationId": op, "state": "succeeded", field: target})
+		return
+	}
+	if windowRename {
+		switch code {
+		case "window_linked":
+			s.fail(w, r, status, code, "Window tertaut ke beberapa tempat. Ubah nama tersedia untuk window dengan satu tautan.")
+			return
+		case "duplicate_name":
+			s.fail(w, r, status, code, "Nama window sudah digunakan dalam session ini.")
+			return
+		case "conflict", "not_found":
+			s.fail(w, r, status, code, "Window atau session berubah. Periksa inventaris kembali.")
 			return
 		}
-		s.json(w, status, map[string]string{"operationId": op, "state": "succeeded", "sessionId": target})
-		return
 	}
 	messages := map[string]string{
 		"server_required":  "Belum ada server tmux aktif pada socket ini. Buat session awal melalui administrasi host, lalu periksa inventaris kembali.",
