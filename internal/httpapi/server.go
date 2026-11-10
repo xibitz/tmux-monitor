@@ -435,6 +435,9 @@ func (s *Server) static(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.Header().Set("Cache-Control", "no-cache")
 	}
+	if name == "manifest.webmanifest" {
+		w.Header().Set("Content-Type", "application/manifest+json")
+	}
 	if name == "index.html" {
 		body, err := fs.ReadFile(s.assets, name)
 		if err != nil {

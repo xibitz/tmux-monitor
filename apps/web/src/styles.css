@@ -16,12 +16,28 @@
   --accent: #b3ed8b;
   --border: #29322a;
   --surface: #191e1a;
+  --safe-height: calc(
+    100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom)
+  );
 }
 * {
   box-sizing: border-box;
 }
 body {
   margin: 0;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+.workspace-offline {
+  display: flex;
+  min-height: 90dvh;
+  max-width: 38rem;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 16px;
+  margin: auto;
+  padding: 24px;
 }
 button,
 input {
@@ -233,7 +249,7 @@ p {
   }
 }
 .login-layout {
-  min-height: 100dvh;
+  min-height: var(--safe-height);
   display: flex;
   flex-direction: column;
   background: radial-gradient(ellipse at 15% 40%, #24352040, transparent 55%);
@@ -401,7 +417,7 @@ p {
 }
 .app-layout {
   display: flex;
-  min-height: 100dvh;
+  min-height: var(--safe-height);
 }
 .sidebar {
   width: 240px;
@@ -412,9 +428,9 @@ p {
   display: flex;
   flex-direction: column;
   position: fixed;
-  height: 100dvh;
-  top: 0;
-  left: 0;
+  height: var(--safe-height);
+  top: env(safe-area-inset-top);
+  left: env(safe-area-inset-left);
   z-index: 20;
 }
 .sidebar > .brand {
@@ -979,6 +995,10 @@ p {
 }
 .modal {
   width: min(500px, calc(100vw - 28px));
+  max-width: calc(
+    100vw - max(14px, env(safe-area-inset-left)) -
+      max(14px, env(safe-area-inset-right))
+  );
   padding: 26px;
   color: #dbe3dc;
   background: #1a211b;
@@ -1307,10 +1327,9 @@ p {
 }
 @media (max-width: 800px) {
   .sidebar {
-    transform: translateX(-100%);
+    transform: translateX(calc(-100% - env(safe-area-inset-left)));
     transition: transform 0.2s;
     width: 240px;
-    padding-bottom: env(safe-area-inset-bottom);
   }
   .sidebar.is-open {
     transform: translateX(0);
@@ -1622,6 +1641,30 @@ p {
 }
 .modal.terminal-modal {
   width: min(1080px, calc(100vw - 24px));
+}
+.modal-header-buttons {
+  display: flex;
+  gap: 4px;
+}
+.modal-header-buttons .icon-button {
+  min-width: 44px;
+  min-height: 44px;
+}
+.modal.viewer-expanded,
+.modal-frame:fullscreen {
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: max(14px, env(safe-area-inset-top))
+    max(14px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom))
+    max(14px, env(safe-area-inset-left));
+  overflow-y: auto;
+  border: 0;
+  border-radius: 0;
+  background: #1a211b;
+  color: #dbe3dc;
 }
 .terminal-context strong {
   overflow-wrap: anywhere;

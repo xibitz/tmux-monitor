@@ -1,4 +1,4 @@
-.PHONY: setup web build check test dev bootstrap clean
+.PHONY: setup web build package check test dev bootstrap clean
 
 setup:
 	npm ci --prefix apps/web
@@ -11,6 +11,12 @@ web:
 build: web
 	go build -trimpath -o bin/hub ./cmd/hub
 	go build -trimpath -o bin/agent ./cmd/agent
+
+package: build
+	tar -czf "bin/tmux-monitor-$$(go env GOOS)-$$(go env GOARCH).tar.gz" \
+		-C "$(CURDIR)/bin" hub agent \
+		-C "$(CURDIR)" deploy docs README.md PRD.md IMPLEMENTATION_PLAN.md MEMORY.md .env.example \
+		scripts/hub-backup.py scripts/measure-capacity.py
 
 check:
 	@test -z "$$(gofmt -l cmd internal)" || (gofmt -l cmd internal; exit 1)

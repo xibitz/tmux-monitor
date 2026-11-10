@@ -1,0 +1,25 @@
+[Unit]
+Description=tmux monitor hub
+Wants=network-online.target tailscaled.service
+After=network-online.target tailscaled.service
+
+[Service]
+Type=simple
+User=tmux-monitor
+Group=tmux-monitor
+StateDirectory=tmux-monitor
+StateDirectoryMode=0700
+WorkingDirectory=/var/lib/tmux-monitor
+EnvironmentFile=/etc/tmux-monitor/hub.env
+ExecStart=/usr/local/bin/tmux-monitor-hub serve
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=25s
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+
+[Install]
+WantedBy=multi-user.target

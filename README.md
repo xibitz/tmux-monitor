@@ -14,11 +14,25 @@ Ubah nama session SSH tersedia secara eksperimental dengan opt-in operator.
 **Terminal SSH tersedia secara eksperimental dan nonaktif secara default.**
 Viewer selalu dimulai read-only; input interaktif memerlukan izin dan aktivasi
 per viewer. Pairing dan inventaris Agent tersedia di source sebagai fitur
-eksperimental yang belum diuji. Service worker, control mode dan notifikasi
-masih dijadwalkan. Gate rilis P0 belum lulus.
+eksperimental yang belum diuji. PWA, packaging service, dan alat backup/restore
+tersedia di source. Control mode dan notifikasi masih dijadwalkan. Gate rilis
+P0 belum lulus.
 
 Agent berikutnya mulai dari [MEMORY.md](MEMORY.md). Status setiap task dan gate
 berada di [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
+
+## Pasang aplikasi di ponsel
+
+Buka hub produksi lewat HTTPS Tailscale Serve. Di Android, gunakan opsi
+**Install app** atau **Tambahkan ke layar utama** pada menu browser yang
+mendukung. Di iOS, gunakan **Bagikan → Tambahkan ke Layar Utama** di Safari.
+Nama menu bergantung pada browser dan versi OS. [Panduan instalasi PWA](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Making_PWAs_installable)
+
+Setelah pemasangan, buka aplikasi dari ikon layar utama. Viewer menyediakan
+tombol **Perbesar tampilan terminal** dan memakai tampilan penuh di dalam
+aplikasi jika browser menolak fullscreen. Service worker menyimpan aset build
+publik dan halaman offline statis. Login, inventaris, audit, dan terminal
+memerlukan koneksi ke hub. Instalasi dan tampilan perangkat nyata belum diuji.
 
 ## Menyiapkan koneksi Agent
 
@@ -477,8 +491,9 @@ Hub menjalankan upgrade saat startup dan menolak database dari versi binary lebi
 baru. Perintah `hub migrate --to 2` menjalankan upgrade tanpa server HTTP.
 Rollback fondasi ke versi 0 **menghapus seluruh tabel aplikasi** dan memerlukan
 `--allow-data-loss`; jangan jalankan pada data penting. Buat backup konsisten dulu
-saat hub dihentikan, atau gunakan fasilitas SQLite backup. Test rollback memakai
-database sementara. Runbook backup/restore produksi lengkap adalah pekerjaan M3.
+saat hub dihentikan. Alat backup/restore, paket service, dan prosedur upgrade
+tersedia di [runbook operasi](docs/operations.md). Matriks gangguan dan alat
+ukur kapasitas dijelaskan di [kualifikasi rilis P0](docs/release-qualification.md).
 
 ## Tahap berikutnya
 

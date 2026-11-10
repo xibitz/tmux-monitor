@@ -26,11 +26,11 @@ pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus
 | T22 | PARTIAL | Source pairing token sekali pakai, revoke, CLI, WSS version/generation, RPC inventaris read-only dan UI tersedia **BELUM DIUJI**. Gate token reuse, revoke, Serve/TLS dan generation tetap terbuka. |
 | T23 | PARTIAL | Source PTY Agent read-only/interaktif, tiket dan framing browser bersama, serta pelepasan terkonfirmasi tersedia **BELUM DIUJI**. Suite T12 belum dijalankan pada Agent. |
 | T24 | PARTIAL | Source heartbeat v2, expiry, reconnect berjeda, fence instance/generation, refresh capability/inventaris dan status UI tersedia **BELUM DIUJI**. Gate sleep/wake dan koneksi ganda tetap terbuka. |
-| T30 | TODO | Manifest/PWA/service worker asset-only, standalone dan uji perangkat. |
+| T30 | PARTIAL | Manifest, ikon, shell offline statis, cache aset publik, safe-area dan fullscreen/fallback tersedia **BELUM DIUJI**. Gate Android/iOS dan inspeksi cache tetap terbuka. |
 | T31 | PARTIAL | Tombol sentuh, Ctrl/Alt/Shift sekali pakai, kolom kombinasi, prefix control-key lokal dan konfirmasi paste multiline tersedia. Matriks byte otomatis tersedia; aksesibilitas dan keyboard/IME HP nyata belum tuntas. |
 | T32 | PARTIAL | Audit dasar dan redaction tests tersedia; filter/retensi/security review/fuzz belum. |
-| T33 | TODO | Packaging service, backup/restore, rollback runbook dan rotasi/revoke. |
-| T34 | TODO | Failure matrix dua transport dan kapasitas; gate rilis P0 belum lulus. |
+| T33 | PARTIAL | Paket binary, template service, backup/restore terenkripsi dan runbook tersedia **BELUM DIUJI**. Clean install dan restore lab belum dijalankan. |
+| T34 | PARTIAL | Matriks gangguan dan alat pengukuran read-only tersedia **BELUM DIJALANKAN**. Kapasitas dan gate P0 belum dibuktikan. |
 | T40 | TODO | Parser control mode state machine, fixture dan fuzz. |
 | T41 | TODO | Event bridge dua transport, sequence/resync dan polling fallback. |
 | T42 | TODO | Live pane independen dan pembuktian isolasi klien/ukuran. |
@@ -411,7 +411,12 @@ Setiap task menghasilkan kode, dokumentasi singkat, dan bukti gate yang relevan.
 
 **Gate P0:** seluruh FR-01–10 serta NFR-01–09 pada PRD diterima; tidak ada temuan keamanan kritis/tinggi yang terbuka; uji disconnect pada kedua transport membuktikan tmux tetap hidup; audit redaksi lulus. **Gate P1:** FR-11–13 dan notifikasi lulus pada matriks versi/perangkat; fallback yang diizinkan terdokumentasi. Kriteria performa diukur pada profil 10 host/50 session dengan output burst; bila tidak tercapai, rilis ditahan atau target diubah secara eksplisit dalam PRD berdasarkan hasil uji, bukan diasumsikan.
 
+Prosedur T34 dan format bukti tersedia di [kualifikasi rilis P0](docs/release-qualification.md).
+Jalankan setelah testing diizinkan. Tidak ada hasil kapasitas pada checkpoint source.
+
 ## 8. Deployment, observability, dan rollback
+
+Langkah instalasi, backup/restore, dan rotasi T33 tersedia di [runbook operasi](docs/operations.md).
 
 1. **Persiapan:** buat akun service hub non-root, direktori data/secret dengan permission ketat, SQLite WAL, Tailscale pada hub dan host. Pastikan SSH host dapat dicapai hanya melalui tailnet. Jadikan port aplikasi hanya localhost dan jalankan Serve privat. Verifikasi `tailscale serve status`, kebijakan Grants, firewall, dan akses negatif.
 2. **Bootstrap:** jalankan migration, buat admin lokal melalui CLI yang tidak mengeluarkan password ke log, login dari HP tailnet, daftarkan satu host uji SSH, baru host penting. Agent dipasang per user OS dan dienroll dengan token sementara.

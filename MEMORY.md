@@ -46,12 +46,15 @@ Source T23 menambahkan PTY Agent read-only dan interaktif eksplisit dengan
 flag hub serta opt-in Agent. T23 belum diuji.
 Source T24 menambahkan heartbeat, reconnect otomatis, fence proses/generation,
 rekonsiliasi inventaris dan status Agent. T24 dan schema007 belum diuji.
+Source T30/T33/T34 menambahkan PWA dan shell offline, paket service dan
+backup/restore, serta matriks gangguan dan alat ukur kapasitas. Semua gate
+penerimaan untuk checkpoint tersebut masih terbuka.
 
 Baseline sebelum irisan T12: `33466f0` (SSH/inventaris); dokumentasi awal handoff:
 `b7b8c1c`. Sebelumnya `1d8c1cf` (UX allowlist), `5c99762` (fondasi), `a879f8c`
 (rancangan). Commit dokumentasi sesudah kode tidak mengubah implementasinya.
 
-**T00, T10, T11 DONE. T02/T03/T12/T13/T20/T21/T22/T23/T24/T31/T32 PARTIAL. Task lain TODO.
+**T00, T10, T11 DONE. T02/T03/T12/T13/T20/T21/T22/T23/T24/T30/T31/T32/T33/T34 PARTIAL. Task lain TODO.
 Berikutnya paritas mutasi Agent T20/T21; gate testing T20–T24 dan perangkat tetap terbuka.**
 DONE pada T10/T11 berarti acceptance kode/automated tests yang dicatat telah
 lulus, bukan bukti sshd/tailnet/HP pengguna sudah diuji. Konektor Agent memiliki source inventaris dan PTY; M1 dan gate rilis P0 belum selesai. Terminal memerlukan
@@ -800,7 +803,7 @@ diff. Commit/push memakai `[skip ci]`. Tidak ada perubahan schema.
 
 ## Checkpoint T24 lifecycle Agent (10 November)
 
-Baseline `2facade`. Status **BELUM DIUJI**. Hanya source, formatting dan review
+Baseline `2facade`, commit source `3bc95b8`. Status **BELUM DIUJI**. Hanya source, formatting dan review
 diff. Commit/push memakai `[skip ci]`.
 
 1. `tmux-agent.v2` menambahkan `instanceId`, `previousGeneration`, dan interval
@@ -826,6 +829,36 @@ diff. Commit/push memakai `[skip ci]`.
 6. Kualifikasi tertunda meliputi compile, migrasi007, heartbeat lease,
    sleep/wake, koneksi ganda/ACK hilang, stale cache, revoke, PTY dan UI.
    Mutasi Agent untuk T20/T21 masih perlu implementasi.
+
+## Checkpoint T30, T33 dan T34 (10 November)
+
+Baseline `3bc95b8`. Status **BELUM DIUJI**. Hanya perubahan source, formatting
+dan review diff. Commit/push memakai `[skip ci]`.
+
+1. **T30.** Manifest standalone dan ikon Android/iOS di `apps/web/public`.
+   Service worker hanya diregistrasi di build produksi HTTPS. Navigasi root
+   memakai jaringan dengan fallback HTML offline statis. Cache dibatasi ke
+   shell offline publik dan JS/CSS build immutable. HTML aplikasi dengan nonce,
+   API, WebSocket dan data terminal tidak masuk Cache Storage. Dashboard
+   melepas detail/viewer saat offline dan mengambil data kembali setelah online.
+   Modal viewer mendukung fullscreen browser dengan fallback ukuran viewport.
+2. **T33.** `make package` membungkus binary dan template hub systemd,
+   Agent systemd user/launchd serta runbook. Instalasi dan pemulihan ada di
+   `docs/operations.md`. `scripts/hub-backup.py` mengambil SQLite snapshot
+   ketika hub dan writer lain berhenti, mengenkripsi DB dan secret SSH terpisah
+   dengan age, dan mengikat pasangan via SHA-256 DB. Restore memeriksa
+   integritas/ref dan hanya membuat direktori baru dengan key mode `0600`.
+   Runbook memuat tindakan terhadap akses yang mungkin kembali dari backup.
+3. **T34.** `docs/release-qualification.md` mendefinisikan failure matrix
+   SSH/Agent, setup 10 host/50 session, kapasitas burst dan pencatatan bukti.
+   `scripts/measure-capacity.py` mengukur GET daftar host/inventaris dan
+   mengeluarkan P95 HTTP agregat dan per transport. Login hanya untuk membuat
+   sesi lab sendiri. Ukuran browser, burst dan gangguan tetap diukur di lab.
+4. Kualifikasi tertunda meliputi Android/iOS, cache/CSP dan fallback fullscreen,
+   build dan paket service, clean install, backup/restore dari SQLite dengan WAL,
+   rotasi/revoke, serta semua skenario kapasitas dan gate P0. Jangan jalankan
+   pengujian sampai instruksi pengguna berubah. Deployment dan data pengguna
+   tidak disentuh.
 
 ## Titik lanjut tepat
 

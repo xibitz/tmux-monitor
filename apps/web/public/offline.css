@@ -1,0 +1,31 @@
+:root {
+  color-scheme: dark;
+  background: #101813;
+  color: #dbe3dc;
+  font:
+    100%/1.55 system-ui,
+    sans-serif;
+}
+
+body {
+  box-sizing: border-box;
+  display: grid;
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0;
+  padding: max(24px, env(safe-area-inset-top))
+    max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom))
+    max(24px, env(safe-area-inset-left));
+  place-items: center;
+}
+
+main {
+  max-width: 34rem;
+}
+
+a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  color: #b3ed8b;
+}

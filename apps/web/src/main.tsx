@@ -3,6 +3,7 @@ import type { FormEvent, ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { TmuxRename } from "./TmuxRename";
 import { AgentSetup } from "./AgentSetup";
+import { registerPWA } from "./pwa";
 import { TmuxLayoutMutation, TmuxLifecycle } from "./TmuxLifecycle";
 import { PaneSnapshotViewer } from "./PaneSnapshotViewer";
 import type { PaneSnapshotTarget } from "./PaneSnapshotViewer";
@@ -20,7 +21,9 @@ import {
   Layers3,
   LoaderCircle,
   LogOut,
+  Maximize2,
   Menu,
+  Minimize2,
   Plus,
   RefreshCw,
   Search,
@@ -311,8 +314,16 @@ function Dashboard({
     }
   }
   useEffect(() => {
+    if (!online) {
+      loadSequence.current++;
+      setHosts([]);
+      setEvents([]);
+      setSelected(undefined);
+      setAdding(false);
+      return;
+    }
     void refresh();
-  }, [tab]);
+  }, [online, tab]);
   useEffect(() => {
     if (tab !== "hosts" || !hasAgent || !online) return;
     let active = true;
@@ -412,6 +423,19 @@ function Dashboard({
         .toLowerCase()
         .includes(query.toLowerCase()),
   );
+  if (!online) {
+    return (
+      <main className="workspace-offline" role="status">
+        <Brand />
+        <WifiOff size={26} aria-hidden="true" />
+        <h1>Perangkat sedang offline</h1>
+        <p>
+          Sambungkan kembali ke tailnet untuk memuat data host dan membuka
+          terminal.
+        </p>
+      </main>
+    );
+  }
   return (
     <div className="app-layout">
       {menuOpen && (
@@ -528,12 +552,6 @@ function Dashboard({
               </button>
             )}
           </div>
-          {!online && (
-            <ErrorNotice>
-              <WifiOff size={17} /> Anda sedang offline. Data yang terlihat
-              mungkin sudah berubah.
-            </ErrorNotice>
-          )}
           {error && <ErrorNotice>{error}</ErrorNotice>}
           {notice && (
             <div className="success-notice" role="status">
@@ -785,7 +803,9 @@ function Dashboard({
           host={selected}
           canDelete={identity.user.isAdmin}
           onUpdated={(updated) => {
-            setSelected(updated);
+            setSelected((current) =>
+              current?.id === updated.id ? updated : current,
+            );
             setHosts((current) =>
               current.map((host) => (host.id === updated.id ? updated : host)),
             );
@@ -849,13 +869,18 @@ function Modal({
   onClose,
   children,
   wide = false,
+  expandable = false,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   wide?: boolean;
+  expandable?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const frame = useRef<HTMLDivElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   useEffect(() => {
@@ -874,23 +899,84 @@ function Modal({
       dialog.close();
     };
   }, []);
+  useEffect(() => {
+    const update = () =>
+      setFullscreen(
+        frame.current !== null && document.fullscreenElement === frame.current,
+      );
+    document.addEventListener("fullscreenchange", update);
+    return () => document.removeEventListener("fullscreenchange", update);
+  }, []);
+  useEffect(() => {
+    if (expandable) return;
+    setExpanded(false);
+    if (
+      document.fullscreenElement === frame.current &&
+      document.fullscreenElement
+    ) {
+      void document.exitFullscreen().catch(() => {});
+    }
+  }, [expandable]);
+  async function toggleSize() {
+    if (
+      document.fullscreenElement === frame.current &&
+      document.fullscreenElement
+    ) {
+      await document.exitFullscreen().catch(() => {});
+    } else if (expanded) {
+      setExpanded(false);
+    } else {
+      try {
+        if (document.fullscreenEnabled && frame.current?.requestFullscreen) {
+          await frame.current.requestFullscreen();
+          return;
+        }
+      } catch {
+        // Some browsers cannot make a modal's content fullscreen.
+      }
+      setExpanded(true);
+    }
+  }
   return (
     <dialog
       ref={ref}
-      className={wide ? "modal terminal-modal" : "modal"}
+      className={`modal${wide ? " terminal-modal" : ""}${expandable && expanded ? " viewer-expanded" : ""}`}
       aria-labelledby="modal-title"
     >
-      <div className="modal-header">
-        <h2 id="modal-title">{title}</h2>
-        <button
-          className="icon-button"
-          aria-label="Tutup dialog"
-          onClick={onClose}
-        >
-          <X size={20} />
-        </button>
+      <div ref={frame} className="modal-frame">
+        <div className="modal-header">
+          <h2 id="modal-title">{title}</h2>
+          <div className="modal-header-buttons">
+            {expandable && (
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={
+                  expanded || fullscreen
+                    ? "Kembalikan ukuran tampilan"
+                    : "Perbesar tampilan terminal"
+                }
+                aria-pressed={expanded || fullscreen}
+                onClick={() => void toggleSize()}
+              >
+                {expanded || fullscreen ? (
+                  <Minimize2 size={18} />
+                ) : (
+                  <Maximize2 size={18} />
+                )}
+              </button>
+            )}
+            <button
+              className="icon-button"
+              aria-label="Tutup dialog"
+              onClick={onClose}
+            >
+              <X size={20} />
+            </button>
+          </div>
+        </div>
+        {children}
       </div>
-      {children}
     </dialog>
   );
 }
@@ -1366,6 +1452,7 @@ function HostDetails({
     <Modal
       title={confirm ? "Hapus profil host?" : host.label}
       wide={!!terminalSession || !!selectedPaneSnapshot}
+      expandable={!!terminalSession}
       onClose={() => {
         if (!busy) onClose();
       }}
@@ -1890,3 +1977,4 @@ createRoot(document.getElementById("root")!).render(
     <App />
   </React.StrictMode>,
 );
+registerPWA();
