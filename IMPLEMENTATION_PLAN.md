@@ -24,7 +24,7 @@ pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus
 | T20 | PARTIAL | Rename baseline99c0791 teruji. Source create/kill + createRevision/guard subtree, konfirmasi ID, izin kill, flag lifecycle default-off dan migrasi005 ditambahkan **BELUM DIUJI** atas permintaan pengguna. Agent parity belum. |
 | T21 | PARTIAL | Seluruh operasi SSH tersedia di source **BELUM DIUJI**. Mencakup snapshot pane, create/rename/kill window, split/kill pane, dan label dampak bersama. Paritas Agent menunggu T22–T24. |
 | T22 | PARTIAL | Source pairing token sekali pakai, revoke, CLI, WSS version/generation, RPC inventaris read-only dan UI tersedia **BELUM DIUJI**. Gate token reuse, revoke, Serve/TLS dan generation tetap terbuka. |
-| T23 | TODO | PTY Agent dan paritas mode terminal. |
+| T23 | PARTIAL | Source PTY Agent read-only/interaktif, tiket dan framing browser bersama, serta pelepasan terkonfirmasi tersedia **BELUM DIUJI**. Suite T12 belum dijalankan pada Agent. |
 | T24 | TODO | Heartbeat, reconnect/jitter, capability refresh dan rekonsiliasi. |
 | T30 | TODO | Manifest/PWA/service worker asset-only, standalone dan uji perangkat. |
 | T31 | PARTIAL | Tombol sentuh, Ctrl/Alt/Shift sekali pakai, kolom kombinasi, prefix control-key lokal dan konfirmasi paste multiline tersedia. Matriks byte otomatis tersedia; aksesibilitas dan keyboard/IME HP nyata belum tuntas. |
@@ -151,6 +151,17 @@ browser dan CI belum dijalankan.
   credential 0600, generation lama/ganda, deadline, batas output dan inventaris
   read-only di Linux/macOS.
 - [ ] Kualifikasi UI pairing, revoke, status/refresh, expiry dan redaksi token.
+
+Checkpoint T23 menambahkan PTY Agent dengan WebSocket outbound khusus per
+viewer. Flag hub default-off dan Agent perlu opt-in `--terminal`. Build, uji
+lokal, browser dan CI belum dijalankan.
+
+- [ ] Kualifikasi suite terminal T12/T13 pada SSH dan Agent, termasuk
+  ukuran manual, raw Ctrl+C/paste/Unicode, sequence, ACL, dan input ambigu.
+- [ ] Kualifikasi setup dan detach PTY pada Linux/macOS, koneksi ganda,
+  revoke saat aktif, batas output, dan reload viewer read-only.
+- [ ] Kualifikasi transport Serve aktual untuk stream kedua, bind
+  ticket/generation, dan penolakan replay serta resize.
 
 | Tahap | Prioritas | Hasil yang dapat didemokan | Gate keluar |
 |---|---:|---|---|

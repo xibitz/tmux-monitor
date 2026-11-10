@@ -10,14 +10,18 @@ import (
 var ttyPath = regexp.MustCompile(`^/dev/(pts/[0-9]{1,10}|tty[a-zA-Z0-9]{1,32})$`)
 
 func ClientTargetsCommand(socket string) (string, error) {
+	args, err := ClientTargetsArgs(socket)
+	if err != nil {
+		return "", err
+	}
+	return terminalShell(args), nil
+}
+
+func ClientTargetsArgs(socket string) ([]string, error) {
 	if !socketName.MatchString(socket) {
-		return "", ErrInvalid
+		return nil, ErrInvalid
 	}
-	args := []string{"tmux", "-L", socket, "list-clients", "-F", "C|#{client_tty}|#{session_id}"}
-	for i := range args {
-		args[i] = ShellQuote(args[i])
-	}
-	return "LC_ALL=C " + strings.Join(args, " "), nil
+	return []string{"tmux", "-L", socket, "list-clients", "-F", "C|#{client_tty}|#{session_id}"}, nil
 }
 
 func ValidTTY(value string) bool { return ttyPath.MatchString(value) }
@@ -68,18 +72,29 @@ func TerminalVersionSupported(version string) bool {
 }
 
 func TerminalPolicyCommand(socket, session string) (string, error) {
-	if !socketName.MatchString(socket) || !validID(session, '$') {
-		return "", ErrInvalid
+	args, err := TerminalPolicyArgs(socket, session)
+	if err != nil {
+		return "", err
 	}
-	args := []string{"tmux", "-L", socket, "display-message", "-p", "F|#{pid}|#{start_time}|#{q:socket_path}|#{version}", ";",
+	return terminalShell(args), nil
+}
+
+func TerminalPolicyArgs(socket, session string) ([]string, error) {
+	if !socketName.MatchString(socket) || !validID(session, '$') {
+		return nil, ErrInvalid
+	}
+	return []string{"tmux", "-L", socket, "display-message", "-p", "F|#{pid}|#{start_time}|#{q:socket_path}|#{version}", ";",
 		"show-options", "-gwv", "window-size", ";",
 		"display-message", "-p", "-t", session + ":", "T|#{session_id}|#{status}|#{window_id}|#{window_width}|#{window_height}", ";",
 		"list-windows", "-t", session, "-F", "W|#{window_id}|#{window-size}|#{window_width}|#{window_height}", ";",
-		"display-message", "-p", "F|#{pid}|#{start_time}|#{q:socket_path}|#{version}"}
+		"display-message", "-p", "F|#{pid}|#{start_time}|#{q:socket_path}|#{version}"}, nil
+}
+
+func terminalShell(args []string) string {
 	for i := range args {
 		args[i] = ShellQuote(args[i])
 	}
-	return "LC_ALL=C " + strings.Join(args, " "), nil
+	return "LC_ALL=C " + strings.Join(args, " ")
 }
 
 func AttachCommand(socket, session string) (string, error) {
@@ -91,21 +106,37 @@ func InteractiveAttachCommand(socket, session string) (string, error) {
 }
 
 func attachCommand(socket, session string, interactive bool) (string, error) {
+	args, err := attachArgs(socket, session, interactive, false)
+	if err != nil {
+		return "", err
+	}
+	// Capture tty off the PTY, frame it with NUL and wait for a fixed ack. tmux
+	// may flush terminal output on startup, so it must not start before the
+	// connector has consumed the complete metadata frame. No user input is used.
+	return `_tmux_monitor_tty=$(tty) && printf '%s\000' "$_tmux_monitor_tty" && IFS= read -r _tmux_monitor_ready && [ "$_tmux_monitor_ready" = 'ready' ] && exec env ` + terminalShell(args), nil
+}
+
+func LocalAttachArgs(socket, session string, interactive bool) ([]string, error) {
+	return attachArgs(socket, session, interactive, true)
+}
+
+func attachArgs(socket, session string, interactive, local bool) ([]string, error) {
 	if !socketName.MatchString(socket) || !validID(session, '$') {
-		return "", ErrInvalid
+		return nil, ErrInvalid
 	}
 	flags := "read-only,ignore-size"
 	if interactive {
 		flags = "ignore-size"
 	}
-	args := []string{"tmux", "-L", socket, "attach-session", "-f", flags, "-t", session}
-	for i := range args {
-		args[i] = ShellQuote(args[i])
+	args := []string{"tmux"}
+	if local {
+		args = append(args, "-N", "-u")
 	}
-	// Capture tty off the PTY, frame it with NUL and wait for a fixed ack. tmux
-	// may flush terminal output on startup, so it must not start before the
-	// connector has consumed the complete metadata frame. No user input is used.
-	return `_tmux_monitor_tty=$(tty) && printf '%s\000' "$_tmux_monitor_tty" && IFS= read -r _tmux_monitor_ready && [ "$_tmux_monitor_ready" = 'ready' ] && exec env LC_ALL=C ` + strings.Join(args, " "), nil
+	args = append(args, "-L", socket, "attach-session")
+	if local {
+		args = append(args, "-E")
+	}
+	return append(args, "-f", flags, "-t", session), nil
 }
 
 func ParseTerminalPolicy(host, socket, session, epoch string, output []byte) (TerminalPolicy, error) {

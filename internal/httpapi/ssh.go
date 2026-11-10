@@ -179,6 +179,10 @@ func (s *Server) observe(r *http.Request, h Host, audit bool) (tmux.Inventory, e
 		return inv, dbErr
 	}
 	if err == nil {
+		if peer != nil {
+			inv.Capabilities.PTYAttach = s.agentTerminalEnabled() && peer.terminal && inv.Capabilities.ServerRunning &&
+				tmux.TerminalVersionSupported(inv.Capabilities.TmuxVersion)
+		}
 		inv.ObservedAt = now
 		inv.Stale = false
 		body, marshalErr := json.Marshal(inv)

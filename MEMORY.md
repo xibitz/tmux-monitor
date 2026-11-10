@@ -19,7 +19,7 @@ Pengguna meminta development diteruskan dan status ditulis agar agent baru bisa
 melanjutkan tanpa mengandalkan riwayat chat. **Memory ini wajib diperbarui setelah
 checkpoint, sebelum berhenti, dan sebelum context/token habis.**
 
-Yang sudah tersedia: hub localhost-only, SQLite WAL/migrasi source001–005, bootstrap
+Yang sudah tersedia: hub localhost-only, SQLite WAL/migrasi source001–006, bootstrap
 admin, Argon2id/cookie sesi, ACL/CSRF/Origin, profil host, audit, UI responsif,
 allowlist SSH, Makefile/CI, **key store + CLI SSH configure/revoke, public host
 key pinning, probe dan inventaris tmux dengan epoch/revision serta cache stale**,
@@ -42,15 +42,17 @@ default-off. Semua operasi T21 tersedia melalui SSH di source. Paritas Agent
 menunggu T22–T24 dan gate pengujian tetap terbuka.
 Source T22 menambahkan pairing, revoke, CLI Agent dan inventaris read-only
 melalui WSS. Flag Agent default-off dan perlu Serve HTTPS. Schema006 belum diuji.
+Source T23 menambahkan PTY Agent read-only dan interaktif eksplisit dengan
+flag hub serta opt-in Agent. T23 belum diuji.
 
 Baseline sebelum irisan T12: `33466f0` (SSH/inventaris); dokumentasi awal handoff:
 `b7b8c1c`. Sebelumnya `1d8c1cf` (UX allowlist), `5c99762` (fondasi), `a879f8c`
 (rancangan). Commit dokumentasi sesudah kode tidak mengubah implementasinya.
 
-**T00, T10, T11 DONE. T02/T03/T12/T13/T20/T21/T22/T31/T32 PARTIAL. Task lain TODO.
-Berikutnya PTY Agent T23 dan lifecycle T24; gate testing T20–T22 dan perangkat tetap terbuka.**
+**T00, T10, T11 DONE. T02/T03/T12/T13/T20/T21/T22/T23/T31/T32 PARTIAL. Task lain TODO.
+Berikutnya lifecycle Agent T24; gate testing T20–T23 dan perangkat tetap terbuka.**
 DONE pada T10/T11 berarti acceptance kode/automated tests yang dicatat telah
-lulus, bukan bukti sshd/tailnet/HP pengguna sudah diuji. Konektor Agent masih terbatas pada inventaris; M1 dan gate rilis P0 belum selesai. Terminal memerlukan
+lulus, bukan bukti sshd/tailnet/HP pengguna sudah diuji. Konektor Agent memiliki source inventaris dan PTY; M1 dan gate rilis P0 belum selesai. Terminal memerlukan
 opt-in operator, bukan rilis P0 yang telah lulus gate.
 
 ## Tasklist dan langkah implementasi
@@ -737,7 +739,7 @@ Commit/push memakai `[skip ci]`.
 
 ## Checkpoint T22 pairing dan inventaris Agent (10 November)
 
-Baseline `bacea40`. Status **BELUM DIUJI**. Source, formatting dan review diff
+Baseline `bacea40`, commit source `e89126c`. Status **BELUM DIUJI**. Source, formatting dan review diff
 saja. Tidak ada test/build/compile/browser/CI dan commit memakai `[skip ci]`.
 
 1. `006_agent_pairing` menyimpan hash token dan credential. Admin menerbitkan
@@ -767,6 +769,33 @@ saja. Tidak ada test/build/compile/browser/CI dan commit memakai `[skip ci]`.
    T23 tetap PTY Agent. T24 tetap heartbeat, reconnect/backoff, dan
    rekonsiliasi. Paritas operasi T20/T21 melalui Agent belum dikerjakan.
 
+## Checkpoint T23 terminal Agent (10 November)
+
+Baseline `e89126c`. Status **BELUM DIUJI**. Hanya source, formatting dan review
+diff. Commit/push memakai `[skip ci]`. Tidak ada perubahan schema.
+
+1. Browser memakai tiket, ACL, audit, dan framing `tmux.v1`/`tmux.v2` yang sama.
+   Tiket Agent mengikat identitas dan generation koneksi. Pengaturan memerlukan
+   flag Agent, terminal, dan Agent terminal, serta `agent run --terminal`.
+   Opsi terminal dan inventaris fresh menentukan tombol viewer di UI.
+2. Hub menawarkan stream satu kali melalui koneksi Agent T22. Agent melakukan
+   upgrade outbound ke `/ws/v1/agent/terminal` dengan bearer, IP Tailnet
+   dan tiket stream singkat. Satu WebSocket per viewer membatasi dampak
+   backpressure ke viewer itu. PTY tidak berbagi kanal dengan inventaris.
+3. Agent membuka attach client pada PTY lokal Linux/macOS. Katalog argv,
+   epoch, ukuran manual dan pemeriksaan tty memakai logika bersama tmux.
+   Agent juga memeriksa `exit-unattached` dan `destroy-unattached` bernilai off.
+   Mode read-only menolak input di hub, relay, dan tmux. Mode interaktif
+   memakai PTY baru, konfirmasi detach, izin `terminal:write`, dan sequence
+   input dengan ack setelah write. Tidak ada resize atau replay input.
+4. Socket per viewer, revoke, atau pergantian generation melepas attach
+   client. Hub meminta konfirmasi detach sebelum menerbitkan tiket mode baru.
+   T24 tetap memiliki heartbeat/reconnect dan rekonsiliasi level Agent.
+5. Kualifikasi tertunda meliputi compile, PTY poll/deadline Linux/macOS,
+   Serve aktual, reuse/generation/revoke, parity frame SSH, ukuran dan
+   input/control keys, ack ambigu, backlog, serta UI. Jangan tandai T23
+   selesai sebelum suite T12 pada Agent diizinkan dan lulus.
+
 ## Titik lanjut tepat
 
 1. Baca hasil CI/commit checkpoint interactive terbaru. Cek git status dan
@@ -785,7 +814,7 @@ saja. Tidak ada test/build/compile/browser/CI dan commit memakai `[skip ci]`.
    instruksi no-testing pengguna. Kualifikasi checklist di atas hanya bila
    pengguna mengizinkan testing kembali; jangan menandai selesai dari review
    source. Seluruh operasi T21 SSH sudah ditulis. Untuk paritas T21, lanjutkan
-   fondasi konektor Agent di T23–T24, lalu gunakan kembali kontrak dan katalog
+   fondasi konektor Agent di T24, lalu gunakan kembali kontrak dan katalog
    operasi untuk transport Agent. Tidak ada raw-shell/
    kill-server API; ledger pending harus tetap retained setelah restart.
 6. Ikuti aturan implementasi di atas; perbarui memory/tasklist/CI dan push SSH.
@@ -807,6 +836,6 @@ yang sama. Frontend Vite tetap
 pada 5173; backend 8080 untuk konfigurasi dev yang sekarang didokumentasikan.
 
 Terminal SSH eksperimental tersedia dengan opt-in dan aktivasi input terpisah;
-Pairing dan inventaris Agent tersedia di source. Tidak ada proses tmux/host pengguna
+Pairing, inventaris dan PTY Agent tersedia di source. Tidak ada proses tmux/host pengguna
 atau credential nyata yang dipakai selama pengujian. Temp browser fixture sudah
 dihentikan; proses pengembangan pengguna dibiarkan berjalan untuk mereka restart.

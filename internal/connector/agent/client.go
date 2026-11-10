@@ -88,7 +88,7 @@ func Enroll(ctx context.Context, hub, token string, profile agentproto.EnrollReq
 	return Binding{Hub: origin, HostID: profile.HostID, AgentID: result.AgentID, OSUser: profile.OSUser, Socket: profile.Socket, Credential: result.Credential}, nil
 }
 
-func (b Binding) Run(ctx context.Context, osName string) error {
+func (b Binding) Run(ctx context.Context, osName string, enableTerminal bool) error {
 	u, err := ValidateHub(b.Hub)
 	if err != nil {
 		return err
@@ -115,7 +115,7 @@ func (b Binding) Run(ctx context.Context, osName string) error {
 	conn.SetReadLimit(agentproto.ControlLimit)
 	helloCtx, cancelHello := context.WithTimeout(ctx, agentproto.HandshakeTimeout)
 	hello := agentproto.Hello{Type: "hello", Version: agentproto.Version, AgentID: b.AgentID, OS: osName,
-		OSUser: b.OSUser, Socket: b.Socket, Tmux: version, Inventory: true}
+		OSUser: b.OSUser, Socket: b.Socket, Tmux: version, Inventory: true, Terminal: enableTerminal}
 	err = agentproto.Write(helloCtx, conn, hello)
 	var ack agentproto.HelloAck
 	if err == nil {
@@ -126,30 +126,5 @@ func (b Binding) Run(ctx context.Context, osName string) error {
 		ack.AgentID != b.AgentID || ack.Generation < 1 {
 		return errors.New("Agent hello was rejected")
 	}
-	for {
-		var req agentproto.Request
-		if err := agentproto.Read(ctx, conn, &req); err != nil {
-			if ctx.Err() != nil {
-				return nil
-			}
-			return errors.New("Agent connection closed")
-		}
-		now := time.Now()
-		if req.Type != agentproto.Snapshot || req.AgentID != b.AgentID || req.Generation != ack.Generation ||
-			!agentproto.ValidRequestID(req.RequestID) || req.Deadline.IsZero() ||
-			req.Deadline.After(now.Add(agentproto.SnapshotTimeout+5*time.Second)) {
-			return errors.New("invalid Agent RPC")
-		}
-		// Absolute time limits caller intent. The local context also bounds execution.
-		operation, cancel := context.WithDeadline(ctx, req.Deadline)
-		result := snapshot(operation, b.Socket)
-		cancel()
-		result.Type, result.RequestID, result.AgentID, result.Generation = agentproto.SnapshotReply, req.RequestID, b.AgentID, ack.Generation
-		write, cancel := context.WithTimeout(ctx, agentproto.HandshakeTimeout)
-		err := agentproto.Write(write, conn, result)
-		cancel()
-		if err != nil {
-			return errors.New("Agent could not return the snapshot")
-		}
-	}
+	return b.controlLoop(ctx, conn, c, ack.Generation, enableTerminal)
 }

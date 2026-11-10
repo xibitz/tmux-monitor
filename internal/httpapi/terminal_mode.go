@@ -19,6 +19,8 @@ type terminalViewer struct {
 	Cancel    context.CancelCauseFunc
 	Done      chan struct{}
 	Switching bool
+	// Published before Done is closed.
+	AgentDetached bool
 }
 
 func (s *Server) issueTerminalTicket(t terminalTicket, ttl time.Duration) (string, bool) {
@@ -41,8 +43,16 @@ func (s *Server) issueTerminalTicket(t terminalTicket, ttl time.Duration) (strin
 	return raw, true
 }
 
+func (s *Server) interactiveAvailable(t terminalTicket) bool {
+	if t.AgentID != "" {
+		return s.agentTerminalEnabled()
+	}
+	_, ok := s.terminal.(interactiveOpener)
+	return ok
+}
+
 func (s *Server) canWriteTerminal(ctx context.Context, r *http.Request, t terminalTicket) bool {
-	if _, ok := s.terminal.(interactiveOpener); !ok {
+	if !s.interactiveAvailable(t) {
 		return false
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
@@ -74,15 +84,16 @@ func (s *Server) terminalModeTicket(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, 422, "invalid_request", "Mode viewer tidak valid.")
 		return
 	}
-	if _, ok := s.terminal.(interactiveOpener); !ok {
-		s.fail(w, r, 503, "interactive_unavailable", "Input interaktif belum tersedia pada konektor ini.")
-		return
-	}
 	s.viewMu.Lock()
 	v, ok := s.viewers[r.PathValue("viewer")]
 	if !ok || v.TokenHash != identity.TokenHash(token(r)) || v.UserID != user(r).ID || v.Cancel == nil {
 		s.viewMu.Unlock()
 		s.fail(w, r, 404, "not_found", "Viewer aktif tidak ditemukan.")
+		return
+	}
+	if !s.interactiveAvailable(v.terminalTicket) {
+		s.viewMu.Unlock()
+		s.fail(w, r, 503, "interactive_unavailable", "Input interaktif belum tersedia pada konektor ini.")
 		return
 	}
 	if v.Switching || v.Mode == body.Mode {
@@ -114,6 +125,10 @@ func (s *Server) terminalModeTicket(w http.ResponseWriter, r *http.Request) {
 	case <-v.Done:
 	case <-ctx.Done():
 		s.fail(w, r, 503, "transition_failed", "Viewer lama belum selesai dilepas. Buka ulang dalam read-only.")
+		return
+	}
+	if t.AgentID != "" && !v.AgentDetached {
+		s.fail(w, r, 503, "transition_failed", "Pelepasan terminal Agent belum terkonfirmasi. Buka ulang dalam read-only.")
 		return
 	}
 	if err := s.checkViewer(ctx, r, t); err != nil {

@@ -111,6 +111,7 @@ func New(db *sql.DB, cfg config.Config, assets fs.FS, logger *slog.Logger) *Serv
 	root.HandleFunc("POST /api/v1/agents/enroll", s.enrollAgent)
 	root.Handle("/api/", s.authorize(api))
 	root.HandleFunc("GET /ws/v1/agent", s.agentUpgrade)
+	root.HandleFunc("GET /ws/v1/agent/terminal", s.agentTerminalUpgrade)
 	root.Handle("GET /ws/v1/terminal", s.authorize(http.HandlerFunc(s.terminalUpgrade)))
 	root.Handle("/ws/", s.authorize(api))
 	root.HandleFunc("/", s.static)

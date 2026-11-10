@@ -43,6 +43,7 @@ func run(ctx context.Context, args []string) error {
 	flags := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	path := flags.String("credential-file", "", "owner-only credential file")
 	if args[0] == "run" {
+		enableTerminal := flags.Bool("terminal", false, "allow local tmux terminal viewers from the paired hub")
 		if err := flags.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -56,7 +57,7 @@ func run(ctx context.Context, args []string) error {
 		if binding.OSUser != account.Username {
 			return errors.New("local OS user differs from the enrolled profile")
 		}
-		return binding.Run(ctx, runtime.GOOS)
+		return binding.Run(ctx, runtime.GOOS, *enableTerminal)
 	}
 
 	hub := flags.String("hub", "", "HTTPS Tailscale Serve origin")

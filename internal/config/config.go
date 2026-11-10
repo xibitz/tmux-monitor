@@ -15,6 +15,7 @@ type Config struct {
 	Origin                  string
 	Development             bool
 	AgentEnabled            bool
+	AgentTerminalEnabled    bool
 	TerminalEnabled         bool
 	PaneSnapshotEnabled     bool
 	MutationsEnabled        bool
@@ -34,6 +35,10 @@ func Load() (Config, error) {
 	c.AgentEnabled, err = strconv.ParseBool(env("TMUX_MONITOR_AGENT_ENABLED", "false"))
 	if err != nil {
 		return c, fmt.Errorf("TMUX_MONITOR_AGENT_ENABLED must be true or false")
+	}
+	c.AgentTerminalEnabled, err = strconv.ParseBool(env("TMUX_MONITOR_AGENT_TERMINAL_ENABLED", "false"))
+	if err != nil {
+		return c, fmt.Errorf("TMUX_MONITOR_AGENT_TERMINAL_ENABLED must be true or false")
 	}
 	c.TerminalEnabled, err = strconv.ParseBool(env("TMUX_MONITOR_TERMINAL_ENABLED", "false"))
 	if err != nil {

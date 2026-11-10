@@ -10,10 +10,12 @@ import "@xterm/xterm/css/xterm.css";
 
 const reasons: Record<string, string> = {
   terminal_size_policy:
-    "Ukuran tmux belum aman untuk viewer. Diperlukan tmux 3.7+ dan window-size manual pada default global serta semua window session. Panduan ada di README bagian terminal SSH.",
+    "Ukuran tmux belum aman untuk viewer. Diperlukan tmux 3.7+ dan window-size manual pada default global serta semua window session. Panduan ada di README.",
   terminal_target_changed:
     "Session, window aktif, atau ukuran berubah. Periksa inventaris lalu buka ulang viewer.",
-  access_revoked: "Akses atau konfigurasi SSH berubah. Viewer dilepas.",
+  terminal_detach_policy:
+    "Terminal Agent memerlukan pengaturan exit-unattached dan destroy-unattached dalam keadaan off.",
+  access_revoked: "Akses atau koneksi host berubah. Viewer dilepas.",
   mode_changed: "Menyiapkan viewer dengan mode baru…",
   input_uncertain:
     "Koneksi input berakhir. Sebagian input mungkin sudah diproses; tidak akan dikirim ulang.",
@@ -27,6 +29,8 @@ const reasons: Record<string, string> = {
     "Viewer tertinggal menerima output. Buka ulang untuk tampilan baru.",
   ssh_closed:
     "Koneksi terminal SSH berakhir. Session tmux mungkin tetap berjalan.",
+  agent_closed:
+    "Koneksi terminal Agent berakhir. Buka ulang dalam read-only setelah Agent terhubung.",
   disconnected: "Koneksi ke hub terputus. Session tmux tetap dikelola host.",
   heartbeat_timeout:
     "Koneksi terminal tidak lagi terkonfirmasi. Input dihentikan. Buka ulang dalam read-only; sebagian input mungkin sudah diproses dan tidak akan dikirim ulang.",
@@ -36,11 +40,11 @@ const reasons: Record<string, string> = {
     "Perangkat sedang offline. Input dihentikan. Setelah terhubung, buka ulang dalam read-only.",
   page_suspended:
     "Halaman ditinggalkan atau ditangguhkan. Buka ulang dalam read-only untuk melanjutkan.",
-  timeout: "Batas waktu koneksi SSH terlampaui.",
+  timeout: "Batas waktu koneksi terminal terlampaui.",
   host_key_mismatch:
     "Host key tidak cocok dengan key terverifikasi. Koneksi dihentikan.",
   authentication_failed: "Autentikasi SSH gagal. Periksa konfigurasi host.",
-  pty_unavailable: "Host SSH tidak menyediakan PTY yang diperlukan.",
+  pty_unavailable: "Host tidak menyediakan PTY yang diperlukan.",
   command_failed: "Session tmux tidak dapat diperiksa. Muat ulang inventaris.",
 };
 

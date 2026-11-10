@@ -1117,6 +1117,7 @@ function HostDetails({
   const [metadataAttempt, setMetadataAttempt] = useState(0);
   const [inventory, setInventory] = useState<Inventory>();
   const [terminalEnabled, setTerminalEnabled] = useState(false);
+  const [agentTerminalEnabled, setAgentTerminalEnabled] = useState(false);
   const [paneSnapshotEnabled, setPaneSnapshotEnabled] = useState(false);
   const [paneSnapshotTarget, setPaneSnapshotTarget] =
     useState<PaneSnapshotTarget>();
@@ -1177,12 +1178,15 @@ function HostDetails({
   }>();
   useEffect(() => {
     let active = true;
-    void api<{ enabled: boolean; paneSnapshotEnabled?: boolean }>(
-      "/terminal/options",
-    )
+    void api<{
+      enabled: boolean;
+      paneSnapshotEnabled?: boolean;
+      agentTerminalEnabled?: boolean;
+    }>("/terminal/options")
       .then((value) => {
         if (active) {
           setTerminalEnabled(value.enabled);
+          setAgentTerminalEnabled(value.agentTerminalEnabled === true);
           setPaneSnapshotEnabled(value.paneSnapshotEnabled === true);
         }
       })
@@ -1263,6 +1267,11 @@ function HostDetails({
   }
   const selectedPaneSnapshot =
     paneSnapshotTarget?.hostId === host.id ? paneSnapshotTarget : undefined;
+  const terminalEnabledForHost =
+    host.transport === "ssh" ? terminalEnabled : agentTerminalEnabled;
+  const terminalAvailable =
+    terminalEnabledForHost &&
+    (host.transport === "ssh" || inventory?.capabilities.ptyAttach === true);
   const layout = layoutOptions?.hostId === host.id ? layoutOptions : undefined;
   const canChangeLayout =
     layout?.canKillWindow || layout?.canSplitPane || layout?.canKillPane;
@@ -1541,7 +1550,7 @@ function HostDetails({
                 <p className="inventory-empty">
                   {inventory.capabilities.serverRunning
                     ? "Belum ada session pada socket ini."
-                    : "SSH terhubung. Belum ada server tmux aktif pada socket ini."}
+                    : "Host terhubung. Belum ada server tmux aktif pada socket ini."}
                 </p>
               ) : (
                 <ul className="session-list">
@@ -1551,7 +1560,7 @@ function HostDetails({
                         <Terminal size={16} />
                         <strong>{session.name}</strong>
                         <code>{session.id}</code>
-                        {terminalEnabled && host.transport === "ssh" && (
+                        {terminalAvailable && (
                           <button
                             className="button secondary"
                             disabled={inventory.stale || busy}
@@ -1769,9 +1778,11 @@ function HostDetails({
           <div className="info-notice">
             <Eye size={16} />
             <span>
-              {terminalEnabled
+              {terminalAvailable
                 ? "Viewer dimulai dalam read-only. Input dapat diaktifkan secara sadar jika Anda memiliki izin mengirim input."
-                : "Viewer terminal belum diaktifkan oleh operator hub. Inventaris tetap dapat diperiksa."}
+                : terminalEnabledForHost
+                  ? "Periksa inventaris host untuk mengetahui apakah terminal Agent tersedia."
+                  : "Viewer terminal belum diaktifkan untuk transport ini. Inventaris tetap dapat diperiksa."}
             </span>
           </div>
           <div className="modal-actions">

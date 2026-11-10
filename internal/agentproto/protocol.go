@@ -74,6 +74,7 @@ type Hello struct {
 	Socket    string `json:"socket"`
 	Tmux      string `json:"tmuxVersion"`
 	Inventory bool   `json:"inventory"`
+	Terminal  bool   `json:"terminal,omitempty"`
 }
 
 type HelloAck struct {

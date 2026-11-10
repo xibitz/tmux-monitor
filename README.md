@@ -24,8 +24,9 @@ berada di [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
 Agent adalah binary Go yang berjalan di mesin tmux sebagai akun pemilik
 session. Ia membuka koneksi keluar ke hub melalui HTTPS Tailscale Serve.
-T22 mencakup pairing, cabut akses, dan inventaris read-only. Terminal Agent,
-mutasi tmux, heartbeat dan reconnect otomatis masih dijadwalkan.
+T22 mencakup pairing, cabut akses, dan inventaris read-only. Terminal Agent
+memiliki opt-in terpisah. Mutasi tmux, heartbeat Agent, dan reconnect otomatis
+masih dijadwalkan.
 
 1. Jalankan hub dalam mode produksi HTTPS dengan Tailscale Serve yang meneruskan
    ke listener localhost. Batasi akses dari mesin Agent melalui Tailscale Grants.
@@ -58,6 +59,28 @@ mutasi tmux, heartbeat dan reconnect otomatis masih dijadwalkan.
 
 T22 belum diuji. Hub memerlukan Serve yang mengganti header sumber, host dan
 protokol untuk permintaan Tailnet. [Source Tailscale Serve](https://github.com/tailscale/tailscale/blob/main/ipn/ipnlocal/serve.go)
+
+## Membuka terminal Agent
+
+Gunakan hub dan binary Agent terbaru. Pada hub HTTPS, aktifkan
+`TMUX_MONITOR_AGENT_ENABLED=true`, `TMUX_MONITOR_TERMINAL_ENABLED=true` dan
+`TMUX_MONITOR_AGENT_TERMINAL_ENABLED=true`. Jalankan Agent yang sudah dipasangkan
+sebagai pemilik tmux.
+
+```sh
+./bin/agent run --terminal --credential-file "$HOME/.config/tmux-monitor/agent.json"
+```
+
+Terminal Agent memakai kebijakan ukuran yang sama dengan terminal SSH. Siapkan
+tmux 3.7 atau lebih baru dan kebijakan ukuran manual pada default global serta
+semua window session. Opsi `exit-unattached` dan `destroy-unattached` harus
+`off` untuk server dan session yang dituju. Dari detail profil Agent, periksa inventaris, lalu klik
+**Buka terminal read-only** pada session. Aktivasi interaktif meminta izin
+`terminal:write` dan membuka PTY baru setelah PTY lama dilepas. Input interaktif
+dapat mengubah pilihan aktif yang dipakai bersama klien lain.
+
+Jika koneksi putus, buka ulang viewer secara eksplisit. Viewer baru dimulai
+dalam read-only. T23 masih eksperimental dan belum diuji.
 
 ## Ubah nama session SSH eksperimental
 

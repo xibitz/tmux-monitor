@@ -26,6 +26,8 @@ type terminalOpener interface {
 }
 type terminalTicket struct {
 	UserID, TokenHash, HostID, Socket, KeyRef, Target, Epoch string
+	AgentID                                                  string
+	AgentGeneration                                          int64
 	Expires                                                  time.Time
 	Mode                                                     string
 }
@@ -34,7 +36,8 @@ var sessionTarget = regexp.MustCompile(`^\$[0-9]{1,16}$`)
 var terminalEpoch = regexp.MustCompile(`^e_[0-9a-f]{64}$`)
 
 func (s *Server) terminalOptions(w http.ResponseWriter, r *http.Request) {
-	s.json(w, 200, map[string]any{"enabled": s.cfg.TerminalEnabled, "mode": "read_only", "paneSnapshotEnabled": s.cfg.PaneSnapshotEnabled})
+	s.json(w, 200, map[string]any{"enabled": s.cfg.TerminalEnabled, "mode": "read_only",
+		"paneSnapshotEnabled": s.cfg.PaneSnapshotEnabled, "agentTerminalEnabled": s.agentTerminalEnabled()})
 }
 
 func (s *Server) terminalTicket(w http.ResponseWriter, r *http.Request) {
@@ -55,12 +58,15 @@ func (s *Server) terminalTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u := user(r)
-	h, record, err := s.terminalAccess(r.Context(), u, body.HostID)
+	h, record, peer, err := s.viewerAccess(r.Context(), u, body.HostID)
 	if err != nil {
-		s.fail(w, r, 404, "not_found", "Host SSH tidak tersedia atau tidak diizinkan.")
+		s.fail(w, r, 404, "not_found", "Host terminal tidak tersedia atau tidak diizinkan.")
 		return
 	}
 	t := terminalTicket{UserID: u.ID, TokenHash: identity.TokenHash(token(r)), HostID: h.ID, Socket: h.SocketName, KeyRef: record.KeyRef, Target: body.SessionID, Epoch: body.Epoch, Mode: "read_only"}
+	if peer != nil {
+		t.AgentID, t.AgentGeneration = peer.id, peer.generation
+	}
 	raw, allowed := s.issueTerminalTicket(t, 30*time.Second)
 	if !allowed {
 		s.fail(w, r, 429, "busy", "Terlalu banyak permintaan viewer. Tunggu 30 detik.")
@@ -70,20 +76,63 @@ func (s *Server) terminalTicket(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) terminalAccess(ctx context.Context, u identity.User, id string) (Host, sshconnector.Record, error) {
-	var found string
-	err := s.db.QueryRowContext(ctx, `SELECT id FROM hosts WHERE id=? AND transport='ssh' AND (? OR id IN (SELECT host_id FROM host_access WHERE user_id=? AND action='tmux:read'))`, id, u.IsAdmin, u.ID).Scan(&found)
-	if err != nil {
-		return Host{}, sshconnector.Record{}, err
-	}
-	h, err := s.observedHost(ctx, found)
+	h, err := s.viewerHost(ctx, u, id, "ssh")
 	if err != nil {
 		return h, sshconnector.Record{}, err
 	}
-	if !s.cfg.AllowedSSHHosts[h.TailnetAddress] {
-		return h, sshconnector.Record{}, sql.ErrNoRows
-	}
-	record, err := s.credentials().Load(ctx, id)
+	record, err := s.sshViewerCredentials(ctx, h)
 	return h, record, err
+}
+
+func (s *Server) viewerHost(ctx context.Context, u identity.User, id, transport string) (Host, error) {
+	return scanObservedHost(s.db.QueryRowContext(ctx, "SELECT "+observedHostColumns+observedHostJoin+
+		`WHERE h.id=? AND (?='' OR h.transport=?) AND (? OR h.id IN
+		(SELECT host_id FROM host_access WHERE user_id=? AND action='tmux:read'))`, id, transport, transport, u.IsAdmin, u.ID))
+}
+
+func (s *Server) sshViewerCredentials(ctx context.Context, h Host) (sshconnector.Record, error) {
+	if !s.cfg.AllowedSSHHosts[h.TailnetAddress] {
+		return sshconnector.Record{}, sql.ErrNoRows
+	}
+	return s.credentials().Load(ctx, h.ID)
+}
+
+func (s *Server) viewerAccess(ctx context.Context, u identity.User, id string) (Host, sshconnector.Record, *agentPeer, error) {
+	h, err := s.viewerHost(ctx, u, id, "")
+	if err != nil {
+		return h, sshconnector.Record{}, nil, err
+	}
+	if h.Transport == "ssh" {
+		record, err := s.sshViewerCredentials(ctx, h)
+		return h, record, nil, err
+	}
+	p := s.agents.peer(id)
+	if h.Transport != "agent" || !s.agentTerminalEnabled() || p == nil || !p.terminal ||
+		p.socket != h.SocketName || p.osUser != h.OSUser || p.ctx.Err() != nil {
+		return h, sshconnector.Record{}, nil, sql.ErrNoRows
+	}
+	select {
+	case <-p.ready:
+	default:
+		return h, sshconnector.Record{}, nil, sql.ErrNoRows
+	}
+	var active bool
+	err = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM agent_identities
+		WHERE id=? AND host_id=? AND generation=? AND revoked_at IS NULL)`, p.id, h.ID, p.generation).Scan(&active)
+	if err == nil && !active {
+		err = sql.ErrNoRows
+	}
+	return h, sshconnector.Record{}, p, err
+}
+
+func (t terminalTicket) matches(h Host, record sshconnector.Record, peer *agentPeer) bool {
+	if h.SocketName != t.Socket {
+		return false
+	}
+	if peer == nil {
+		return h.Transport == "ssh" && t.AgentID == "" && record.KeyRef == t.KeyRef
+	}
+	return h.Transport == "agent" && peer.id == t.AgentID && peer.generation == t.AgentGeneration
 }
 
 func (s *Server) terminalUpgrade(w http.ResponseWriter, r *http.Request) {
@@ -116,9 +165,9 @@ func (s *Server) terminalUpgrade(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, 403, "forbidden", "Tiket viewer kedaluwarsa atau sudah dipakai.")
 		return
 	}
-	h, record, err := s.terminalAccess(r.Context(), user(r), t.HostID)
-	if err != nil || record.KeyRef != t.KeyRef || h.SocketName != t.Socket {
-		s.fail(w, r, 404, "not_found", "Host SSH tidak tersedia atau tidak diizinkan.")
+	h, record, peer, err := s.viewerAccess(r.Context(), user(r), t.HostID)
+	if err != nil || !t.matches(h, record, peer) {
+		s.fail(w, r, 404, "not_found", "Host terminal tidak tersedia atau tidak diizinkan.")
 		return
 	}
 	if err := s.checkViewer(r.Context(), r, t); err != nil {
@@ -162,7 +211,7 @@ func (s *Server) terminalUpgrade(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	s.serveTerminal(r, conn, t, h, record, viewer)
+	s.serveTerminal(r, conn, t, h, record, peer, viewer, reservation)
 }
 
 func (s *Server) terminalAudit(r *http.Request, t terminalTicket, action, result string) error {
@@ -172,7 +221,25 @@ func (s *Server) terminalAudit(r *http.Request, t terminalTicket, action, result
 	return err
 }
 
-func (s *Server) serveTerminal(r *http.Request, conn *websocket.Conn, t terminalTicket, h Host, record sshconnector.Record, viewer string) {
+func (s *Server) openViewer(ctx context.Context, t terminalTicket, h Host, record sshconnector.Record, peer *agentPeer) (sshconnector.Terminal, error) {
+	if peer != nil {
+		stream, err := peer.openTerminal(ctx, t)
+		if err != nil {
+			return nil, err
+		}
+		return stream, nil
+	}
+	host := sshconnector.Host{ID: h.ID, Address: h.TailnetAddress, User: h.OSUser, Socket: h.SocketName}
+	if t.Mode == "interactive" {
+		if interactive, ok := s.terminal.(interactiveOpener); ok {
+			return interactive.OpenInteractiveTerminal(ctx, host, record, t.Target, t.Epoch)
+		}
+		return nil, &sshconnector.Failure{Code: "interactive_unavailable"}
+	}
+	return s.terminal.OpenTerminal(ctx, host, record, t.Target, t.Epoch)
+}
+
+func (s *Server) serveTerminal(r *http.Request, conn *websocket.Conn, t terminalTicket, h Host, record sshconnector.Record, peer *agentPeer, viewer string, reservation *terminalViewer) {
 	lifetime, cancelLifetime := context.WithTimeout(r.Context(), 30*time.Minute)
 	defer cancelLifetime()
 	ctx, cancel := context.WithCancelCause(lifetime)
@@ -183,7 +250,7 @@ func (s *Server) serveTerminal(r *http.Request, conn *websocket.Conn, t terminal
 	var wg sync.WaitGroup
 	defer func() { _ = conn.CloseNow(); wg.Wait() }()
 	s.viewMu.Lock()
-	s.viewers[viewer].Cancel = cancel
+	reservation.Cancel = cancel
 	s.viewMu.Unlock()
 	incoming := make(chan []byte, 8)
 	wg.Add(1)
@@ -229,16 +296,7 @@ func (s *Server) serveTerminal(r *http.Request, conn *websocket.Conn, t terminal
 		defer done()
 		return conn.Write(deadline, websocket.MessageText, data)
 	}
-	opener := s.terminal.OpenTerminal
-	if t.Mode == "interactive" {
-		interactive, ok := s.terminal.(interactiveOpener)
-		if !ok {
-			cancel(errors.New("interactive_unavailable"))
-			return
-		}
-		opener = interactive.OpenInteractiveTerminal
-	}
-	stream, err := opener(ctx, sshconnector.Host{ID: h.ID, Address: h.TailnetAddress, User: h.OSUser, Socket: h.SocketName}, record, t.Target, t.Epoch)
+	stream, err := s.openViewer(ctx, t, h, record, peer)
 	if err == nil {
 		err = s.checkViewer(ctx, r, t)
 	}
@@ -255,7 +313,13 @@ func (s *Server) serveTerminal(r *http.Request, conn *websocket.Conn, t terminal
 		cancel(err)
 		return
 	}
-	defer stream.Close()
+	closeStream := sync.OnceFunc(func() {
+		err := stream.Close()
+		if peer != nil {
+			reservation.AgentDetached = err == nil
+		}
+	})
+	defer closeStream()
 	result := "success"
 	if t.Mode == "interactive" {
 		result = "success_interactive"
@@ -269,7 +333,7 @@ func (s *Server) serveTerminal(r *http.Request, conn *websocket.Conn, t terminal
 		cancel(errors.New("disconnected"))
 	}
 	defer func() {
-		_ = stream.Close()
+		closeStream()
 		reason := "disconnected"
 		if cause := context.Cause(ctx); cause != nil {
 			reason = cause.Error()
@@ -283,7 +347,11 @@ func (s *Server) serveTerminal(r *http.Request, conn *websocket.Conn, t terminal
 			s.log.Error("terminal audit failed", "request_id", requestID(r))
 		}
 	}()
-	queue := make(chan []byte, 32) // 32 * 32 KiB = 1 MiB; never persist output
+	queueSize := 32
+	if peer != nil {
+		queueSize -= agentOutputQueue
+	}
+	queue := make(chan []byte, queueSize) // gateway + Agent relay queue total at most 1 MiB
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
@@ -299,7 +367,11 @@ func (s *Server) serveTerminal(r *http.Request, conn *websocket.Conn, t terminal
 				}
 			}
 			if e != nil {
-				cancel(errors.New("ssh_closed"))
+				if peer != nil {
+					cancel(errors.New(sshconnector.Code(e)))
+				} else {
+					cancel(errors.New("ssh_closed"))
+				}
 				return
 			}
 			if ctx.Err() != nil {
@@ -446,8 +518,8 @@ func (s *Server) checkViewer(ctx context.Context, r *http.Request, t terminalTic
 	if err != nil || u.ID != t.UserID {
 		return identity.ErrCredentials
 	}
-	h, record, err := s.terminalAccess(ctx, u, t.HostID)
-	if err != nil || record.KeyRef != t.KeyRef || h.SocketName != t.Socket {
+	h, record, peer, err := s.viewerAccess(ctx, u, t.HostID)
+	if err != nil || !t.matches(h, record, peer) {
 		return identity.ErrCredentials
 	}
 	if t.Mode == "interactive" && !s.canWriteTerminal(ctx, r, t) {

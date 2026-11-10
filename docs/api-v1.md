@@ -74,8 +74,40 @@ generation and deadline, and its correlated result contains bounded tmux
 inventory records. The hub parses those records with the shared inventory
 parser. The limits are eight concurrent handshakes, 32 active Agents, four
 concurrent snapshot calls globally and one per Agent. Agent never opens an
-inbound listener. Host status reflects the last explicit probe. PTY, write
-operations, heartbeat and automatic reconnect are scheduled for later slices.
+inbound listener. Host status reflects the last explicit probe. Management
+mutations, heartbeat and automatic reconnect are scheduled for later slices.
+
+## Experimental Agent terminal (T23, source only)
+
+The same browser ticket, ACL, audit, mode transition and `tmux.v1`/`tmux.v2`
+WebSocket contracts apply to both transports. `GET /terminal/options` adds
+`agentTerminalEnabled`. Agent terminal requires `TMUX_MONITOR_AGENT_ENABLED`,
+`TMUX_MONITOR_TERMINAL_ENABLED`, `TMUX_MONITOR_AGENT_TERMINAL_ENABLED`, and
+`agent run --terminal`. Fresh Agent inventory advertises `ptyAttach` when
+configured and its tmux version is supported.
+
+Agent viewer tickets bind to the current Agent identity and connection generation.
+The authenticated control connection offers each terminal using an expiring
+one-use stream ticket. The Agent dials `GET /ws/v1/agent/terminal` using its
+normal bearer/IP binding, `X-Agent-Stream-Ticket` and
+`tmux-agent-terminal.v1`. The dedicated connection holds one PTY. The Agent
+validates epoch, manual sizing and the attached client against fresh tmux state.
+
+Each dedicated binary message starts with a one-byte direction (output 0,
+input 1, input acknowledgment 2) and an 8-byte big-endian sequence. Output
+and input have independent sequences starting at 1. Input is at most 16 KiB,
+output at most 32 KiB, and an acknowledgment has no payload. The Agent sends an
+acknowledgment only after the complete write to the PTY. The hub does not retry
+unacknowledged input. The Agent rejects input on a read-only PTY.
+
+The browser starts read-only. Explicit interactive activation uses a fresh
+viewer and PTY after confirmed detach. The shared sizing policy requires tmux
+3.7+ and manual window sizes. Agent also requires `exit-unattached` and
+`destroy-unattached` to be off. The Agent requests `ignore-size` and disables
+attach-time environment updates. Target changes, revocation, replacement,
+deadline or overflow close the viewer. Browser resize never changes the remote
+PTY. Agent restart/reconnect requires a fresh read-only browser ticket. Build,
+testing, browser verification and CI are pending.
 
 ## SSH observation slice (T10–T11)
 
@@ -323,7 +355,8 @@ This is a development slice, not completion of the P0 access/device gates.
 SSH session viewers start read-only. Interactive activation is described below;
 viewport resize remains rejected. No automatic reconnect or input replay. All requests require login.
 
-`GET /api/v1/terminal/options` returns `{enabled,mode:"read_only",paneSnapshotEnabled}`.
+`GET /api/v1/terminal/options` returns
+`{enabled,mode:"read_only",paneSnapshotEnabled,agentTerminalEnabled}`.
 `POST /api/v1/terminal/tickets` requires exact Origin, REST CSRF and `tmux:read`.
 Body: `{hostId,sessionId,epoch}` (native `$N` session ID). Response:
 `{ticket,expiresIn:30}`. The random ticket is stored hashed, usable once, bound to

@@ -33,9 +33,11 @@ type agentPeer struct {
 	ctx                        context.Context
 	cancel                     context.CancelFunc
 	ready                      chan struct{}
+	terminal                   bool
 
 	mu      sync.Mutex
 	pending *agentPending
+	offers  map[string]*agentStreamOffer
 }
 
 type agentPending struct {
@@ -172,6 +174,7 @@ func (s *Server) agentUpgrade(w http.ResponseWriter, r *http.Request) {
 		(hello.Tmux != "" && !agentproto.ValidTmuxVersion(hello.Tmux)) {
 		return
 	}
+	p.terminal = hello.Terminal
 	if s.agents.register(helloCtx, s.db, p, hash, ip) != nil {
 		return
 	}
@@ -207,10 +210,14 @@ func (p *agentPeer) readResults() {
 	}
 }
 
-func (a *agentConnections) snapshot(ctx context.Context, h Host) (tmux.Inventory, *agentPeer, error) {
+func (a *agentConnections) peer(hostID string) *agentPeer {
 	a.mu.Lock()
-	p := a.peers[h.ID]
-	a.mu.Unlock()
+	defer a.mu.Unlock()
+	return a.peers[hostID]
+}
+
+func (a *agentConnections) snapshot(ctx context.Context, h Host) (tmux.Inventory, *agentPeer, error) {
+	p := a.peer(h.ID)
 	fail := func(code string) (tmux.Inventory, *agentPeer, error) {
 		return tmux.Inventory{}, p, &sshconnector.Failure{Code: code}
 	}
