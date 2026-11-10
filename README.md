@@ -73,16 +73,22 @@ metadata tersebut dan bukan cara untuk mengulang operasi. Batas guard64 item
 per koleksi dan command64KiB; target lebih besar ditolak. Seluruh perilaku baru
 ini masih perlu dikualifikasi saat testing kembali diminta.
 
-## Ubah nama window SSH
+## Buat dan ubah nama window SSH
 
-Source ubah nama window tersedia untuk tmux 3.8. Fitur eksperimental ini memakai
-`TMUX_MONITOR_WINDOW_MUTATIONS_ENABLED` bersama flag mutasi dan memerlukan izin
-`tmux:read` serta `tmux:write`. Kedua flag default nonaktif.
+Pengelolaan window eksperimental mendukung tmux 3.8. Aktifkan
+`TMUX_MONITOR_WINDOW_MUTATIONS_ENABLED=true` dan
+`TMUX_MONITOR_MUTATIONS_ENABLED=true` pada hub. Kedua flag default nonaktif.
+Akun memerlukan izin `tmux:read` serta `tmux:write`.
+
+Dari inventaris SSH, pilih **Buat window** pada session yang dituju, isi nama,
+lalu konfirmasi. Session harus berada di luar grup tmux dan memiliki kurang dari
+64 window. tmux memulai proses default pada window baru dalam mode detached.
+Window muncul di daftar session tanpa dipilih otomatis oleh perintah ini.
 
 Dari inventaris SSH, pilih **Ubah nama window** pada window dengan satu tautan,
-isi nama baru, lalu konfirmasi. Nama harus unik dalam session. tmux menonaktifkan
-penamaan otomatis untuk window yang diubah. Periksa inventaris jika hasil operasi
-belum pasti. Implementasi ini berstatus belum diuji.
+isi nama baru, lalu konfirmasi. tmux menonaktifkan penamaan otomatis untuk
+window yang diubah. Kedua operasi memerlukan nama yang unik dalam session.
+Periksa inventaris jika hasil operasi belum pasti. Implementasi ini belum diuji.
 
 ## Snapshot pane SSH — kode belum diuji
 

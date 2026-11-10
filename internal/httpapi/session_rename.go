@@ -33,13 +33,15 @@ func (s *Server) sessionOptions(w http.ResponseWriter, r *http.Request) {
 	renameAllowed := err == nil
 	_, _, killErr := s.lifecycleAccess(r.Context(), u, found, "tmux:kill")
 	lifecycle := s.cfg.MutationsEnabled && s.cfg.SessionLifecycleEnabled
+	windowWrite := s.windowMutationsEnabled() && renameAllowed
 	s.json(w, 200, map[string]bool{
 		"renameEnabled":    s.cfg.MutationsEnabled,
 		"canRename":        s.cfg.MutationsEnabled && renameAllowed,
 		"lifecycleEnabled": lifecycle,
 		"canCreate":        lifecycle && renameAllowed,
 		"canKill":          lifecycle && killErr == nil,
-		"canRenameWindow":  s.cfg.MutationsEnabled && s.cfg.WindowMutationsEnabled && renameAllowed,
+		"canRenameWindow":  windowWrite,
+		"canCreateWindow":  windowWrite,
 	})
 }
 

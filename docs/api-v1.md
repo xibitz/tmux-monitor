@@ -190,6 +190,28 @@ operation ledger persists intent and outcome and revalidates SSH access before
 dispatch. Pending or ambiguous results are reconciled through inventory. The
 operation uses the current schema. Build, tests, browser checks and CI are pending.
 
+## Experimental window creation (T21, source only)
+
+`POST /api/v1/hosts/{id}/sessions/{sid}/windows` uses the same two flags, login,
+Origin, CSRF, `tmux:read` and `tmux:write` permissions and 32-hex
+`Idempotency-Key` as window rename. Session options expose `canCreateWindow`.
+Use the native session ID and send `{name,epoch,revision,confirmed:true}` with
+the selected session's tree revision from fresh SSH inventory. The name follows
+the rename rules. Query parameters are rejected.
+
+The target must be an existing ungrouped tmux 3.8 session with fewer than 64
+windows. The connector validates the epoch, revision and name uniqueness from
+fresh inventory. The final guard checks server and session identity, ungrouped
+status, and the observed window IDs, indices and names. A change at this stage
+returns a conflict. tmux allocates the index and starts its configured default
+process with the new window detached. The new window is visible in the session's
+window list. Host-configured tmux hooks can run as usual.
+
+Success returns 201 with `{operationId,state:"succeeded",windowId}`. The
+existing ledger retains the outcome and returned window ID without dispatching
+again on replay. Inspect fresh inventory after an uncertain outcome. Build,
+tests, browser checks and CI are pending.
+
 ## Experimental pane snapshot (T21, source only; untested)
 
 `TMUX_MONITOR_PANE_SNAPSHOT_ENABLED` defaults to false and is independent of the
@@ -227,7 +249,7 @@ change returns409, missing/inaccessible target404, disabled/over-limit503,
 unsupported/invalid422 and busy429. No stale snapshot fallback is used.
 
 Source only: build, tests, browser verification and CI are deferred at the user's
-request. Window/pane mutations and Agent parity remain future work.
+request. Window kill, pane split/kill and Agent parity remain future work.
 
 ## Experimental SSH terminal (T12, partial)
 

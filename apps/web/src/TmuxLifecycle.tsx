@@ -9,11 +9,11 @@ type Props = {
   onRefresh: () => void;
 } & (
   | { mode: "create"; session?: never }
-  | { mode: "kill"; session: { id: string; name: string } }
+  | { mode: "kill" | "create-window"; session: { id: string; name: string } }
 );
 
 // Source addition only; validation/interaction tests are intentionally pending.
-export function SessionLifecycle(props: Props) {
+export function TmuxLifecycle(props: Props) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
   const [confirmed, setConfirmed] = useState(false);
@@ -24,7 +24,10 @@ export function SessionLifecycle(props: Props) {
   const sending = useRef(false);
   const input = useRef<HTMLInputElement>(null);
   const killing = props.mode === "kill";
-  const target = props.mode === "kill" ? props.session.id : "";
+  const creatingWindow = props.mode === "create-window";
+  const target = props.session?.id ?? "";
+  const resource = creatingWindow ? "window" : "session";
+  const actionLabel = killing ? "Hentikan session" : `Buat ${resource}`;
   const valid = killing
     ? value === target
     : /^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$/.test(value);
@@ -58,7 +61,8 @@ export function SessionLifecycle(props: Props) {
           name: value,
           confirmed: true,
         };
-    const suffix = killing ? `/${encodeURIComponent(target)}` : "";
+    const sessionPath = target ? `/${encodeURIComponent(target)}` : "";
+    const suffix = creatingWindow ? `${sessionPath}/windows` : sessionPath;
     try {
       const key = crypto.randomUUID().replaceAll("-", "");
       await api(
@@ -86,17 +90,15 @@ export function SessionLifecycle(props: Props) {
         disabled={props.disabled || busy}
         onClick={() => (attempted ? props.onRefresh() : setOpen(true))}
       >
-        {attempted
-          ? "Periksa hasil operasi"
-          : killing
-            ? "Hentikan session"
-            : "Buat session"}
+        {attempted ? "Periksa hasil operasi" : actionLabel}
       </button>
     );
   return (
     <section
       className="session-rename"
-      aria-label={killing ? "Konfirmasi hentikan session" : "Buat session baru"}
+      aria-label={
+        killing ? "Konfirmasi hentikan session" : `Buat ${resource} baru`
+      }
     >
       {props.mode === "kill" ? (
         <p>
@@ -104,6 +106,13 @@ export function SessionLifecycle(props: Props) {
           <code>{props.session.id}</code>)? Klien pada session ini akan
           terlepas. Proses di window yang tidak dipakai session lain dapat
           berhenti.
+        </p>
+      ) : props.mode === "create-window" ? (
+        <p>
+          Buat window pada session <strong>{props.session.name}</strong> (
+          <code>{props.session.id}</code>). Window baru terlihat oleh semua
+          klien session dan dibuat tanpa memilihnya. Pembuatan tersedia untuk
+          session yang tidak tergabung dalam grup tmux.
         </p>
       ) : (
         <p>
@@ -116,7 +125,7 @@ export function SessionLifecycle(props: Props) {
           <label>
             {killing
               ? "Ketik ID session untuk konfirmasi"
-              : "Nama session baru"}
+              : `Nama ${resource} baru`}
             <input
               ref={input}
               value={value}
@@ -142,7 +151,9 @@ export function SessionLifecycle(props: Props) {
             />
             {killing
               ? "Saya memahami proses pada session ini dapat berhenti."
-              : "Saya memahami session baru akan dibuat pada host ini."}
+              : creatingWindow
+                ? "Saya memahami window baru akan muncul dalam session ini."
+                : "Saya memahami session baru akan dibuat pada host ini."}
           </label>
         </>
       )}
@@ -180,7 +191,7 @@ export function SessionLifecycle(props: Props) {
             disabled={props.disabled || busy || !confirmed || !valid}
             onClick={() => void submit()}
           >
-            {killing ? "Hentikan session ini" : "Buat session baru"}
+            {killing ? "Hentikan session ini" : `Buat ${resource} baru`}
           </button>
         )}
       </div>

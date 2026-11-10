@@ -2,7 +2,7 @@ import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { TmuxRename } from "./TmuxRename";
-import { SessionLifecycle } from "./SessionLifecycle";
+import { TmuxLifecycle } from "./TmuxLifecycle";
 import { PaneSnapshotViewer } from "./PaneSnapshotViewer";
 import type { PaneSnapshotTarget } from "./PaneSnapshotViewer";
 import {
@@ -1119,12 +1119,14 @@ function HostDetails({
     useState<PaneSnapshotTarget>();
   const [canRename, setCanRename] = useState(false);
   const [canRenameWindow, setCanRenameWindow] = useState(false);
+  const [canCreateWindow, setCanCreateWindow] = useState(false);
   const [canCreate, setCanCreate] = useState(false);
   const [canKill, setCanKill] = useState(false);
   useEffect(() => {
     let active = true;
     setCanRename(false);
     setCanRenameWindow(false);
+    setCanCreateWindow(false);
     setCanCreate(false);
     setCanKill(false);
     if (host.transport === "ssh")
@@ -1133,11 +1135,13 @@ function HostDetails({
         canCreate?: boolean;
         canKill?: boolean;
         canRenameWindow?: boolean;
+        canCreateWindow?: boolean;
       }>(`/hosts/${encodeURIComponent(host.id)}/session-options`)
         .then((options) => {
           if (active) {
             setCanRename(options.canRename);
             setCanRenameWindow(options.canRenameWindow === true);
+            setCanCreateWindow(options.canCreateWindow === true);
             setCanCreate(options.canCreate === true);
             setCanKill(options.canKill === true);
           }
@@ -1427,14 +1431,18 @@ function HostDetails({
                   inventaris terakhir; data ini sudah stale.
                 </div>
               )}
-              {(canRename || canCreate || canKill || canRenameWindow) &&
+              {(canRename ||
+                canCreate ||
+                canKill ||
+                canRenameWindow ||
+                canCreateWindow) &&
                 inventory.capabilities.tmuxVersion !== "3.8" && (
                   <p className="panel-description">
-                    Pengelolaan session memerlukan tmux 3.8.
+                    Pengelolaan session dan window memerlukan tmux 3.8.
                   </p>
                 )}
               {canCreate && (
-                <SessionLifecycle
+                <TmuxLifecycle
                   key={inventory.observedAt + ":create"}
                   mode="create"
                   hostId={host.id}
@@ -1508,7 +1516,7 @@ function HostDetails({
                         />
                       )}
                       {canKill && session.revision && (
-                        <SessionLifecycle
+                        <TmuxLifecycle
                           key={inventory.observedAt + session.id + ":kill"}
                           mode="kill"
                           hostId={host.id}
@@ -1518,6 +1526,28 @@ function HostDetails({
                           disabled={
                             busy ||
                             inventory.stale ||
+                            inventory.capabilities.tmuxVersion !== "3.8"
+                          }
+                          onRefresh={() => {
+                            setInventory(undefined);
+                            void inspect();
+                          }}
+                        />
+                      )}
+                      {canCreateWindow && session.revision && (
+                        <TmuxLifecycle
+                          key={
+                            inventory.observedAt + session.id + ":create-window"
+                          }
+                          mode="create-window"
+                          hostId={host.id}
+                          epoch={inventory.epoch}
+                          revision={session.revision}
+                          session={session}
+                          disabled={
+                            busy ||
+                            inventory.stale ||
+                            !inventory.epoch ||
                             inventory.capabilities.tmuxVersion !== "3.8"
                           }
                           onRefresh={() => {

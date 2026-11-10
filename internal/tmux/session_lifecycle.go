@@ -230,13 +230,16 @@ func windowStateGuard(window Window) (string, error) {
 }
 
 func CreatedSessionID(output []byte) (string, error) {
-	const prefix = "MTM_CREATED|"
+	return createdID(output, "MTM_CREATED|", '$')
+}
+
+func createdID(output []byte, prefix string, kind byte) (string, error) {
 	value := string(output)
 	if !strings.HasPrefix(value, prefix) || !strings.HasSuffix(value, "\n") {
 		return "", ErrInvalid
 	}
 	id := strings.TrimSuffix(strings.TrimPrefix(value, prefix), "\n")
-	if !validID(id, '$') {
+	if !validID(id, kind) {
 		return "", ErrInvalid
 	}
 	return id, nil

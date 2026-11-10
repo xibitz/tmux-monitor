@@ -83,10 +83,10 @@ func (s *Server) killSession(w http.ResponseWriter, r *http.Request) {
 
 // Reserve the operation before dispatch and persist its acknowledged result.
 func (s *Server) executeLifecycleRequest(w http.ResponseWriter, r *http.Request, action, permission, epoch, target string, body any, successStatus int, execute lifecycleExecute) {
-	windowRename := action == windowRenameAction
+	windowOperation := action == windowRenameAction || action == windowCreateAction
 	validResult := func(result string) bool {
-		if windowRename {
-			return tmux.ValidWindowID(result) && result == target
+		if windowOperation {
+			return tmux.ValidWindowID(result) && (action != windowRenameAction || result == target)
 		}
 		return tmux.ValidSessionID(result)
 	}
@@ -94,7 +94,7 @@ func (s *Server) executeLifecycleRequest(w http.ResponseWriter, r *http.Request,
 		if code == "success" && !validResult(result) {
 			status, code, result = 409, "operation_uncertain", ""
 		}
-		s.lifecycleResponse(w, r, status, code, op, result, windowRename)
+		s.lifecycleResponse(w, r, status, code, op, result, windowOperation)
 	}
 	h, record, err := s.lifecycleAccess(r.Context(), user(r), r.PathValue("id"), permission)
 	if err != nil {
@@ -208,19 +208,19 @@ func (s *Server) executeLifecycleRequest(w http.ResponseWriter, r *http.Request,
 	respond(status, code, op, resultTarget)
 }
 
-func (s *Server) lifecycleResponse(w http.ResponseWriter, r *http.Request, status int, code, op, target string, windowRename bool) {
+func (s *Server) lifecycleResponse(w http.ResponseWriter, r *http.Request, status int, code, op, target string, windowOperation bool) {
 	if op != "" {
 		w.Header().Set("X-Operation-ID", op)
 	}
 	if code == "success" && (status == 200 || status == 201) {
 		field := "sessionId"
-		if windowRename {
+		if windowOperation {
 			field = "windowId"
 		}
 		s.json(w, status, map[string]string{"operationId": op, "state": "succeeded", field: target})
 		return
 	}
-	if windowRename {
+	if windowOperation {
 		switch code {
 		case "window_linked":
 			s.fail(w, r, status, code, "Window tertaut ke beberapa tempat. Ubah nama tersedia untuk window dengan satu tautan.")

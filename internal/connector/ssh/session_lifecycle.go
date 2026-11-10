@@ -12,21 +12,31 @@ func (m *Manager) CreateSession(ctx context.Context, h Host, record Record, r tm
 	if !tmux.ValidCreateSession(r) {
 		return "", fail("invalid_request")
 	}
-	return m.executeGuardedMutation(ctx, h, record, "", "", func(output []byte) (string, error) { return tmux.CreateSessionCommand(h.ID, h.Socket, r, output) }, authorize)
+	return m.executeGuardedMutation(ctx, h, record, true, func(output []byte) (string, error) {
+		return tmux.CreateSessionCommand(h.ID, h.Socket, r, output)
+	}, tmux.CreatedSessionID, authorize)
 }
 func (m *Manager) KillSession(ctx context.Context, h Host, record Record, session string, r tmux.KillSessionRequest, authorize func(context.Context) error) (string, error) {
 	if !tmux.ValidKillSession(session, r) {
 		return "", fail("invalid_request")
 	}
-	return m.executeGuardedMutation(ctx, h, record, session, "MTM_KILLED\n", func(output []byte) (string, error) {
+	return m.executeGuardedMutation(ctx, h, record, false, func(output []byte) (string, error) {
 		return tmux.KillSessionCommand(h.ID, h.Socket, session, r, output)
-	}, authorize)
+	}, fixedMutationResult("MTM_KILLED\n", session), authorize)
+}
+
+func fixedMutationResult(marker, target string) func([]byte) (string, error) {
+	return func(output []byte) (string, error) {
+		if string(output) != marker {
+			return "", tmux.ErrInvalid
+		}
+		return target, nil
+	}
 }
 
 // Kept separate from the verified rename implementation until lifecycle tests
 // qualify these new catalogs. All operations share the same bounded host gate.
-func (m *Manager) executeGuardedMutation(ctx context.Context, h Host, record Record, target, successMarker string, catalog func([]byte) (string, error), authorize func(context.Context) error) (string, error) {
-	creating := target == ""
+func (m *Manager) executeGuardedMutation(ctx context.Context, h Host, record Record, createsSession bool, catalog, result func([]byte) (string, error), authorize func(context.Context) error) (string, error) {
 	if authorize == nil {
 		return "", fail("invalid_request")
 	}
@@ -74,7 +84,7 @@ func (m *Manager) executeGuardedMutation(ctx context.Context, h Host, record Rec
 	}
 	if err != nil {
 		if Code(err) == "command_failed" && noServer(stderr) {
-			if creating {
+			if createsSession {
 				return "", fail("server_required")
 			}
 			return "", fail("conflict")
@@ -105,7 +115,7 @@ func (m *Manager) executeGuardedMutation(ctx context.Context, h Host, record Rec
 	}
 	output, stderr, err = run(ctx, client, command, 1024)
 	if err != nil {
-		if creating && Code(err) == "command_failed" && strings.HasPrefix(strings.TrimSpace(string(stderr)), "duplicate session:") {
+		if createsSession && Code(err) == "command_failed" && strings.HasPrefix(strings.TrimSpace(string(stderr)), "duplicate session:") {
 			return "", fail("duplicate_name")
 		}
 		return "", fail("operation_uncertain")
@@ -113,15 +123,9 @@ func (m *Manager) executeGuardedMutation(ctx context.Context, h Host, record Rec
 	if string(output) == "MTM_CONFLICT\n" {
 		return "", fail("conflict")
 	}
-	if creating {
-		id, err := tmux.CreatedSessionID(output)
-		if err != nil {
-			return "", fail("operation_uncertain")
-		}
-		return id, nil
-	}
-	if string(output) != successMarker {
+	id, err := result(output)
+	if err != nil {
 		return "", fail("operation_uncertain")
 	}
-	return target, nil
+	return id, nil
 }

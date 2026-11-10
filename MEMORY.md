@@ -35,8 +35,8 @@ telah ditambahkan di belakang flag baru default-off; **belum diuji atau dikompil
 Migrasi005 juga belum diuji; database/runtime pengguna belum diupgrade.
 Source snapshot pane SSH read-only kini tersedia dengan flag terpisah default-off.
 Belum diuji; tidak ada perubahan schema untuk irisan ini.
-Source ubah nama window SSH tersedia dengan flag default-off dan lingkup window
-satu tautan. Statusnya belum diuji.
+Source ubah nama window satu tautan dan buat window detached pada session di
+luar grup tersedia untuk SSH dengan flag default-off. Statusnya belum diuji.
 
 Baseline sebelum irisan T12: `33466f0` (SSH/inventaris); dokumentasi awal handoff:
 `b7b8c1c`. Sebelumnya `1d8c1cf` (UX allowlist), `5c99762` (fondasi), `a879f8c`
@@ -666,6 +666,34 @@ Commit source `bc3f7a3` sudah dipush ke `main` melalui SSH.
    izin, dan UI. T21 tetap PARTIAL. Berikutnya create/kill window, split/kill
    pane dan paritas Agent.
 
+## Checkpoint T21 buat window (10 November)
+
+Baseline `15f125c`. Status **BELUM DIUJI**. Hanya perubahan source,
+formatting dan review diff. Commit checkpoint menggunakan `[skip ci]`.
+
+1. `POST /hosts/{id}/sessions/{sid}/windows` dan opsi `canCreateWindow` memakai
+   flag mutasi umum dan window. Endpoint menerima nama, epoch, revision tree
+   session, konfirmasi, dan kunci idempotensi. Login, Origin, CSRF, izin read
+   dan write serta verifikasi ulang binding SSH memakai jalur lifecycle.
+2. `internal/tmux/window_create.go` mencocokkan revision session dengan
+   inventaris SSH baru. Guard antrean tmux memeriksa fingerprint server,
+   identitas session, status di luar grup dan daftar window (ID, nama, indeks).
+   Nama duplikat ditolak dan batasnya kurang dari 64 window sebelum create.
+   tmux 3.8 menyinkronkan window antar-session dalam satu grup, sehingga grup
+   ditolak oleh guard. Katalog menjalankan `new-window -d`, memakai proses
+   default host, dan meminta tmux mengalokasikan indeks. Hook host dapat berjalan.
+3. Parser marker mengembalikan native `windowId` pada respons 201. Ledger
+   schema005 menyimpan hasil untuk replay, dengan audit dan invalidasi cache
+   melalui jalur yang sudah ada. Tidak ada migrasi atau perubahan format inventaris.
+4. `TmuxLifecycle.tsx` berbagi form dengan operasi session. Tombol **Buat window**
+   ada pada session di inventaris SSH. UI menjelaskan dampak pada daftar window
+   bersama dan meminta pemeriksaan inventaris setelah hasil tidak pasti.
+5. Kualifikasi ditunda. Periksa compile/build, target session dan alokasi
+   indeks, duplikasi serta perubahan nama/indeks/grup sebelum dispatch, window
+   tetap detached, hook dan hasil ambigu, marker 201 dan replay, izin/revoke
+   serta UI. T21 tetap PARTIAL. Irisan berikutnya kill window, lalu split/kill
+   pane dan paritas Agent.
+
 ## Titik lanjut tepat
 
 1. Baca hasil CI/commit checkpoint interactive terbaru. Cek git status dan
@@ -683,8 +711,9 @@ Commit source `bc3f7a3` sudah dipush ke `main` melalui SSH.
 5. T20: source create/kill sekarang tersedia tetapi belum diuji. Tetap ikuti
    instruksi no-testing pengguna. Kualifikasi checklist di atas hanya bila
    pengguna mengizinkan testing kembali; jangan menandai selesai dari review
-   source. T21 snapshot dan rename window sudah ditulis. Berikutnya operasi window/pane lain
-   tanpa menjalankan operasi nyata. Tidak ada raw-shell/
+   source. T21 snapshot pane serta buat dan ubah nama window sudah ditulis.
+   Berikutnya kill window dan split/kill pane tanpa menjalankan operasi nyata.
+   Tidak ada raw-shell/
    kill-server API; ledger pending harus tetap retained setelah restart.
 6. Ikuti aturan implementasi di atas; perbarui memory/tasklist/CI dan push SSH.
 
