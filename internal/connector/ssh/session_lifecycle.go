@@ -104,6 +104,10 @@ func (m *Manager) executeGuardedMutation(ctx context.Context, h Host, record Rec
 			return "", fail("duplicate_name")
 		case errors.Is(err, tmux.ErrWindowLinked):
 			return "", fail("window_linked")
+		case errors.Is(err, tmux.ErrLastWindow):
+			return "", fail("last_window")
+		case errors.Is(err, tmux.ErrLastPane):
+			return "", fail("last_pane")
 		case errors.Is(err, tmux.ErrLifecycleUnsupported):
 			return "", fail("tmux_unsupported")
 		default:

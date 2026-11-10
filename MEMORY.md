@@ -37,6 +37,9 @@ Source snapshot pane SSH read-only kini tersedia dengan flag terpisah default-of
 Belum diuji; tidak ada perubahan schema untuk irisan ini.
 Source ubah nama window satu tautan dan buat window detached pada session di
 luar grup tersedia untuk SSH dengan flag default-off. Statusnya belum diuji.
+Source hapus window dan split/hapus pane SSH memakai flag layout terpisah,
+default-off. Semua operasi T21 tersedia melalui SSH di source. Paritas Agent
+menunggu T22–T24 dan gate pengujian tetap terbuka.
 
 Baseline sebelum irisan T12: `33466f0` (SSH/inventaris); dokumentasi awal handoff:
 `b7b8c1c`. Sebelumnya `1d8c1cf` (UX allowlist), `5c99762` (fondasi), `a879f8c`
@@ -668,7 +671,7 @@ Commit source `bc3f7a3` sudah dipush ke `main` melalui SSH.
 
 ## Checkpoint T21 buat window (10 November)
 
-Baseline `15f125c`. Status **BELUM DIUJI**. Hanya perubahan source,
+Baseline `15f125c`, commit source `48b0bdd`. Status **BELUM DIUJI**. Hanya perubahan source,
 formatting dan review diff. Commit checkpoint menggunakan `[skip ci]`.
 
 1. `POST /hosts/{id}/sessions/{sid}/windows` dan opsi `canCreateWindow` memakai
@@ -694,6 +697,42 @@ formatting dan review diff. Commit checkpoint menggunakan `[skip ci]`.
    serta UI. T21 tetap PARTIAL. Irisan berikutnya kill window, lalu split/kill
    pane dan paritas Agent.
 
+## Checkpoint T21 layout SSH (10 November)
+
+Baseline `48b0bdd`. Status **BELUM DIUJI**. Checkpoint ini menutup
+implementasi source SSH untuk T21. Hanya formatting dan review diff.
+Commit/push memakai `[skip ci]`.
+
+1. `DELETE /hosts/{id}/windows/{wid}`, `POST /hosts/{id}/panes/{pid}/split`
+   dan `DELETE /hosts/{id}/panes/{pid}` memakai
+   `TMUX_MONITOR_LAYOUT_MUTATIONS_ENABLED` bersama flag mutasi umum.
+   Opsi per host menampilkan kemampuan sesuai flag dan izin. Read+kill untuk
+   hapus, read+write untuk split. Jalur login/Origin/CSRF, ledger idempotensi,
+   audit, cache invalidation dan revalidasi binding SSH memakai lifecycle.
+2. `internal/tmux/layout_mutations.go` memvalidasi native IDs, epoch, revision
+   window, dan keanggotaan pane. Guard antrean memakai identitas server/session,
+   state window/pane, jumlah yang relevan, satu tautan dan session di luar grup.
+   Hapus window terakhir dan pane terakhir ditolak agar tidak menutup objek
+   induk. Split/hapus pane menolak window yang sedang zoom. Split menerima enum
+   berdampingan/bertumpuk dan memakai `split-window -d` tanpa argumen shell.
+3. Marker hasil memakai `windowId` untuk hapus window dan `paneId` untuk
+   split/hapus pane. API mengembalikan 201 untuk split dan 200 untuk hapus.
+   Tidak ada perubahan schema atau format inventaris.
+4. Form layout memakai alur yang sama dengan create/kill session. Hapus
+   menampilkan nama/ID dan jumlah pane terdampak serta meminta ID yang persis.
+   Split meminta arah dan menjelaskan dampak pada layout bersama. Setelah
+   percobaan, pengguna harus memeriksa inventaris sebelum permintaan baru.
+5. Kualifikasi tertunda meliputi compile/build, target compound tmux 3.8,
+   link/group/zoom/last-item races, ACL/revoke/CSRF/Origin, marker dan hook,
+   pending/replay, layout desktop, konfirmasi dan UI ponsel. Uji hanya setelah
+   pengguna mengizinkan. T21 tetap PARTIAL karena Agent membutuhkan T22–T24
+   dan suite kontrak kedua transport belum dijalankan.
+6. Untuk paritas, gunakan tipe request T21 pada RPC `tmux.operation` yang
+   diizinkan satu per satu. Agent membaca inventaris baru pada socket profil
+   dan menjalankan guard lokal. Hub mempertahankan izin per aksi, ledger dan
+   audit, mengarahkan operasi sesuai transport profil dan memperlakukan
+   putus koneksi setelah dispatch sebagai hasil tidak pasti.
+
 ## Titik lanjut tepat
 
 1. Baca hasil CI/commit checkpoint interactive terbaru. Cek git status dan
@@ -711,9 +750,9 @@ formatting dan review diff. Commit checkpoint menggunakan `[skip ci]`.
 5. T20: source create/kill sekarang tersedia tetapi belum diuji. Tetap ikuti
    instruksi no-testing pengguna. Kualifikasi checklist di atas hanya bila
    pengguna mengizinkan testing kembali; jangan menandai selesai dari review
-   source. T21 snapshot pane serta buat dan ubah nama window sudah ditulis.
-   Berikutnya kill window dan split/kill pane tanpa menjalankan operasi nyata.
-   Tidak ada raw-shell/
+   source. Seluruh operasi T21 SSH sudah ditulis. Untuk paritas T21, lanjutkan
+   fondasi konektor Agent di T22–T24, lalu gunakan kembali kontrak dan katalog
+   operasi untuk transport Agent. Tidak ada raw-shell/
    kill-server API; ledger pending harus tetap retained setelah restart.
 6. Ikuti aturan implementasi di atas; perbarui memory/tasklist/CI dan push SSH.
 

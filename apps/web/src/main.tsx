@@ -2,7 +2,7 @@ import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { TmuxRename } from "./TmuxRename";
-import { TmuxLifecycle } from "./TmuxLifecycle";
+import { TmuxLayoutMutation, TmuxLifecycle } from "./TmuxLifecycle";
 import { PaneSnapshotViewer } from "./PaneSnapshotViewer";
 import type { PaneSnapshotTarget } from "./PaneSnapshotViewer";
 import {
@@ -1122,6 +1122,12 @@ function HostDetails({
   const [canCreateWindow, setCanCreateWindow] = useState(false);
   const [canCreate, setCanCreate] = useState(false);
   const [canKill, setCanKill] = useState(false);
+  const [layoutOptions, setLayoutOptions] = useState<{
+    hostId: string;
+    canKillWindow?: boolean;
+    canSplitPane?: boolean;
+    canKillPane?: boolean;
+  }>();
   useEffect(() => {
     let active = true;
     setCanRename(false);
@@ -1129,6 +1135,7 @@ function HostDetails({
     setCanCreateWindow(false);
     setCanCreate(false);
     setCanKill(false);
+    setLayoutOptions(undefined);
     if (host.transport === "ssh")
       void api<{
         canRename: boolean;
@@ -1136,6 +1143,9 @@ function HostDetails({
         canKill?: boolean;
         canRenameWindow?: boolean;
         canCreateWindow?: boolean;
+        canKillWindow?: boolean;
+        canSplitPane?: boolean;
+        canKillPane?: boolean;
       }>(`/hosts/${encodeURIComponent(host.id)}/session-options`)
         .then((options) => {
           if (active) {
@@ -1144,6 +1154,13 @@ function HostDetails({
             setCanCreateWindow(options.canCreateWindow === true);
             setCanCreate(options.canCreate === true);
             setCanKill(options.canKill === true);
+            const { canKillWindow, canSplitPane, canKillPane } = options;
+            setLayoutOptions({
+              hostId: host.id,
+              canKillWindow,
+              canSplitPane,
+              canKillPane,
+            });
           }
         })
         .catch(() => {});
@@ -1243,8 +1260,22 @@ function HostDetails({
   }
   const selectedPaneSnapshot =
     paneSnapshotTarget?.hostId === host.id ? paneSnapshotTarget : undefined;
+  const layout = layoutOptions?.hostId === host.id ? layoutOptions : undefined;
+  const canChangeLayout =
+    layout?.canKillWindow || layout?.canSplitPane || layout?.canKillPane;
+  const layoutDisabled =
+    busy ||
+    !inventory ||
+    inventory.hostId !== host.id ||
+    inventory.stale ||
+    !inventory.epoch ||
+    inventory.capabilities.tmuxVersion !== "3.8";
+  function refreshLayout() {
+    setInventory(undefined);
+    void inspect();
+  }
   const windowLinks = new Map<string, number>();
-  if (canRenameWindow && inventory?.hostId === host.id) {
+  if ((canRenameWindow || canChangeLayout) && inventory?.hostId === host.id) {
     for (const session of inventory.sessions) {
       for (const window of session.windows) {
         windowLinks.set(window.id, (windowLinks.get(window.id) ?? 0) + 1);
@@ -1435,10 +1466,11 @@ function HostDetails({
                 canCreate ||
                 canKill ||
                 canRenameWindow ||
-                canCreateWindow) &&
+                canCreateWindow ||
+                canChangeLayout) &&
                 inventory.capabilities.tmuxVersion !== "3.8" && (
                   <p className="panel-description">
-                    Pengelolaan session dan window memerlukan tmux 3.8.
+                    Pengelolaan session, window, dan pane memerlukan tmux 3.8.
                   </p>
                 )}
               {canCreate && (
@@ -1594,6 +1626,22 @@ function HostDetails({
                                   }}
                                 />
                               )}
+                            {layout?.canKillWindow &&
+                              session.windows.length > 1 &&
+                              windowLinks.get(window.id) === 1 &&
+                              window.revision && (
+                                <TmuxLayoutMutation
+                                  key={`${inventory.observedAt}:${window.revision}:kill-window`}
+                                  mode="kill-window"
+                                  hostId={host.id}
+                                  sessionId={session.id}
+                                  window={window}
+                                  epoch={inventory.epoch}
+                                  revision={window.revision}
+                                  disabled={layoutDisabled}
+                                  onRefresh={refreshLayout}
+                                />
+                              )}
                             <ul>
                               {window.panes.map((pane) => (
                                 <li className="pane-row" key={pane.id}>
@@ -1632,6 +1680,43 @@ function HostDetails({
                                       >
                                         Snapshot pane
                                       </button>
+                                    )}
+                                  {windowLinks.get(window.id) === 1 &&
+                                    window.revision &&
+                                    (layout?.canSplitPane ||
+                                      (layout?.canKillPane &&
+                                        window.panes.length > 1)) && (
+                                      <div className="pane-mutations">
+                                        {layout?.canSplitPane && (
+                                          <TmuxLayoutMutation
+                                            key={`${inventory.observedAt}:${window.revision}:split`}
+                                            mode="split-pane"
+                                            hostId={host.id}
+                                            sessionId={session.id}
+                                            window={window}
+                                            pane={pane}
+                                            epoch={inventory.epoch}
+                                            revision={window.revision}
+                                            disabled={layoutDisabled}
+                                            onRefresh={refreshLayout}
+                                          />
+                                        )}
+                                        {layout?.canKillPane &&
+                                          window.panes.length > 1 && (
+                                            <TmuxLayoutMutation
+                                              key={`${inventory.observedAt}:${window.revision}:kill-pane`}
+                                              mode="kill-pane"
+                                              hostId={host.id}
+                                              sessionId={session.id}
+                                              window={window}
+                                              pane={pane}
+                                              epoch={inventory.epoch}
+                                              revision={window.revision}
+                                              disabled={layoutDisabled}
+                                              onRefresh={refreshLayout}
+                                            />
+                                          )}
+                                      </div>
                                     )}
                                 </li>
                               ))}

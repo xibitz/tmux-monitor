@@ -1231,6 +1231,17 @@ p {
   margin-left: auto;
   color: #7f9673;
 }
+.pane-mutations {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.pane-mutations .session-rename {
+  flex-basis: 100%;
+  margin: 0;
+}
 .pane-snapshot-button {
   min-height: 44px;
 }
@@ -1701,7 +1712,8 @@ p {
   width: 90px;
   min-width: 0;
 }
-.prefix-setting select {
+.prefix-setting select,
+.session-rename select {
   display: block;
   width: 100%;
   min-height: 44px;

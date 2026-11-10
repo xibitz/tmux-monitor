@@ -212,6 +212,37 @@ existing ledger retains the outcome and returned window ID without dispatching
 again on replay. Inspect fresh inventory after an uncertain outcome. Build,
 tests, browser checks and CI are pending.
 
+## Experimental window removal and pane layout (T21, source only)
+
+These SSH tmux 3.8 operations require both `TMUX_MONITOR_MUTATIONS_ENABLED`
+and `TMUX_MONITOR_LAYOUT_MUTATIONS_ENABLED`. The layout flag defaults to false.
+All requests require login, exact Origin, CSRF, `tmux:read`, a 32-hex
+`Idempotency-Key`, and `confirmed:true`. Query parameters are rejected.
+
+| Endpoint | Additional permission | Additional JSON fields | Success |
+|---|---|---|---|
+| `DELETE /api/v1/hosts/{id}/windows/{wid}` | `tmux:kill` | `sessionId`, `confirmation` equal to `wid` | 200 with `windowId` |
+| `POST /api/v1/hosts/{id}/panes/{pid}/split` | `tmux:write` | `sessionId`, `windowId`, `direction` (`side-by-side` or `stacked`) | 201 with new `paneId` |
+| `DELETE /api/v1/hosts/{id}/panes/{pid}` | `tmux:kill` | `sessionId`, `windowId`, `confirmation` equal to `pid` | 200 with `paneId` |
+
+Send `epoch` and the containing window's `revision` from fresh inventory for
+all three requests. IDs are native tmux IDs. Session options add `canKillWindow`,
+`canSplitPane` and `canKillPane` as permission and feature indicators.
+
+Targets must be single-link windows in an ungrouped session. The hub refuses
+removal of the session's last window or the window's last pane and refuses pane
+layout operations on a zoomed window. Split starts the tmux-configured default
+process without selecting the new pane. Split and removal affect the shared
+layout. Removing an active window or pane can change the active selection, and
+removal can stop processes in the affected panes. Host tmux hooks may run.
+
+The hub checks fresh inventory and uses a final tmux guard for target identity,
+links, relevant counts and observed window/pane state. A missing target in fresh
+inventory returns 404. Changes and scope restrictions return 409. Success
+also includes `operationId` and `state:"succeeded"`. Replays use the stored
+outcome and never redispatch. Inspect fresh inventory after an uncertain result.
+No schema changes. Build, tests, browser verification and CI are pending.
+
 ## Experimental pane snapshot (T21, source only; untested)
 
 `TMUX_MONITOR_PANE_SNAPSHOT_ENABLED` defaults to false and is independent of the
@@ -249,7 +280,7 @@ change returns409, missing/inaccessible target404, disabled/over-limit503,
 unsupported/invalid422 and busy429. No stale snapshot fallback is used.
 
 Source only: build, tests, browser verification and CI are deferred at the user's
-request. Window kill, pane split/kill and Agent parity remain future work.
+request. Agent parity remains future work.
 
 ## Experimental SSH terminal (T12, partial)
 

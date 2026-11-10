@@ -83,18 +83,32 @@ func (s *Server) killSession(w http.ResponseWriter, r *http.Request) {
 
 // Reserve the operation before dispatch and persist its acknowledged result.
 func (s *Server) executeLifecycleRequest(w http.ResponseWriter, r *http.Request, action, permission, epoch, target string, body any, successStatus int, execute lifecycleExecute) {
-	windowOperation := action == windowRenameAction || action == windowCreateAction
+	field := "sessionId"
+	switch action {
+	case windowRenameAction, windowCreateAction, windowKillAction:
+		field = "windowId"
+	case paneSplitAction, paneKillAction:
+		field = "paneId"
+	}
 	validResult := func(result string) bool {
-		if windowOperation {
-			return tmux.ValidWindowID(result) && (action != windowRenameAction || result == target)
+		switch action {
+		case windowRenameAction, windowKillAction:
+			return tmux.ValidWindowID(result) && result == target
+		case windowCreateAction:
+			return tmux.ValidWindowID(result)
+		case paneKillAction:
+			return tmux.ValidPaneID(result) && result == target
+		case paneSplitAction:
+			return tmux.ValidPaneID(result) && result != target
+		default:
+			return tmux.ValidSessionID(result)
 		}
-		return tmux.ValidSessionID(result)
 	}
 	respond := func(status int, code, op, result string) {
 		if code == "success" && !validResult(result) {
 			status, code, result = 409, "operation_uncertain", ""
 		}
-		s.lifecycleResponse(w, r, status, code, op, result, windowOperation)
+		s.lifecycleResponse(w, r, status, code, op, result, field, action)
 	}
 	h, record, err := s.lifecycleAccess(r.Context(), user(r), r.PathValue("id"), permission)
 	if err != nil {
@@ -178,7 +192,8 @@ func (s *Server) executeLifecycleRequest(w http.ResponseWriter, r *http.Request,
 		if code == "mutation_limit" {
 			status = 422
 		}
-		if code == "window_linked" {
+		switch code {
+		case "window_linked", "last_window", "last_pane":
 			status = 409
 		}
 	}
@@ -208,19 +223,34 @@ func (s *Server) executeLifecycleRequest(w http.ResponseWriter, r *http.Request,
 	respond(status, code, op, resultTarget)
 }
 
-func (s *Server) lifecycleResponse(w http.ResponseWriter, r *http.Request, status int, code, op, target string, windowOperation bool) {
+func (s *Server) lifecycleResponse(w http.ResponseWriter, r *http.Request, status int, code, op, target, field, action string) {
 	if op != "" {
 		w.Header().Set("X-Operation-ID", op)
 	}
 	if code == "success" && (status == 200 || status == 201) {
-		field := "sessionId"
-		if windowOperation {
-			field = "windowId"
-		}
 		s.json(w, status, map[string]string{"operationId": op, "state": "succeeded", field: target})
 		return
 	}
-	if windowOperation {
+	switch action {
+	case windowKillAction, paneSplitAction, paneKillAction:
+		switch code {
+		case "window_linked":
+			s.fail(w, r, status, code, "Operasi layout memerlukan window dengan satu tautan.")
+			return
+		case "last_window":
+			s.fail(w, r, status, code, "Window terakhir dalam session tidak dapat dihapus dari sini.")
+			return
+		case "last_pane":
+			s.fail(w, r, status, code, "Pane terakhir dalam window tidak dapat dihapus dari sini.")
+			return
+		case "conflict":
+			s.fail(w, r, status, code, "Target berubah atau tidak memenuhi batas operasi layout. Periksa inventaris, grup session dan zoom pane.")
+			return
+		case "not_found":
+			s.fail(w, r, status, code, "Target layout tidak ditemukan. Periksa inventaris kembali.")
+			return
+		}
+	case windowCreateAction, windowRenameAction:
 		switch code {
 		case "window_linked":
 			s.fail(w, r, status, code, "Window tertaut ke beberapa tempat. Ubah nama tersedia untuk window dengan satu tautan.")

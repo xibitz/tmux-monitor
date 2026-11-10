@@ -90,6 +90,26 @@ isi nama baru, lalu konfirmasi. tmux menonaktifkan penamaan otomatis untuk
 window yang diubah. Kedua operasi memerlukan nama yang unik dalam session.
 Periksa inventaris jika hasil operasi belum pasti. Implementasi ini belum diuji.
 
+## Hapus window, split pane, dan hapus pane lewat SSH
+
+Untuk tiga operasi ini, aktifkan `TMUX_MONITOR_LAYOUT_MUTATIONS_ENABLED=true`
+dan `TMUX_MONITOR_MUTATIONS_ENABLED=true` pada hub. Keduanya nonaktif secara
+default. Operasi memakai tmux 3.8 dan izin `tmux:read`. Split juga memerlukan
+`tmux:write`, sedangkan hapus memerlukan `tmux:kill`.
+
+- **Hapus window** menampilkan jumlah pane yang akan ditutup dan meminta ID
+  window untuk konfirmasi. Session harus memiliki lebih dari satu window.
+- **Split pane** meminta arah berdampingan atau atas dan bawah. Pane baru
+  memakai proses default tmux tanpa dipilih otomatis oleh perintah split.
+- **Hapus pane** meminta ID pane untuk konfirmasi. Window harus memiliki lebih
+  dari satu pane.
+
+Operasi ini mengubah layout bersama. Penghapusan dapat menghentikan proses
+dan mengubah pilihan aktif. Target harus berada pada window satu tautan dalam
+session di luar grup. Untuk split dan hapus pane, keluarkan window dari mode
+zoom dahulu. Periksa inventaris setelah hasil yang tidak pasti. Implementasi
+ini belum diuji.
+
 ## Snapshot pane SSH — kode belum diuji
 
 Snapshot menampilkan teks dari satu pane tanpa membuka terminal interaktif,

@@ -34,6 +34,7 @@ func (s *Server) sessionOptions(w http.ResponseWriter, r *http.Request) {
 	_, _, killErr := s.lifecycleAccess(r.Context(), u, found, "tmux:kill")
 	lifecycle := s.cfg.MutationsEnabled && s.cfg.SessionLifecycleEnabled
 	windowWrite := s.windowMutationsEnabled() && renameAllowed
+	layoutEnabled := s.layoutMutationsEnabled()
 	s.json(w, 200, map[string]bool{
 		"renameEnabled":    s.cfg.MutationsEnabled,
 		"canRename":        s.cfg.MutationsEnabled && renameAllowed,
@@ -42,6 +43,9 @@ func (s *Server) sessionOptions(w http.ResponseWriter, r *http.Request) {
 		"canKill":          lifecycle && killErr == nil,
 		"canRenameWindow":  windowWrite,
 		"canCreateWindow":  windowWrite,
+		"canKillWindow":    layoutEnabled && killErr == nil,
+		"canSplitPane":     layoutEnabled && renameAllowed,
+		"canKillPane":      layoutEnabled && killErr == nil,
 	})
 }
 

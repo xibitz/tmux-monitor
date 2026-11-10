@@ -17,6 +17,22 @@ type RenameWindowRequest struct {
 
 func ValidWindowID(id string) bool { return validID(id, '@') }
 
+func findWindowLink(inv Inventory, sessionID, windowID string) (session *Session, window *Window, links int) {
+	for i := range inv.Sessions {
+		current := &inv.Sessions[i]
+		for j := range current.Windows {
+			candidate := &current.Windows[j]
+			if candidate.ID == windowID {
+				links++
+				if current.ID == sessionID {
+					session, window = current, candidate
+				}
+			}
+		}
+	}
+	return session, window, links
+}
+
 func ValidRenameWindow(windowID string, request RenameWindowRequest) bool {
 	return ValidWindowID(windowID) && ValidSessionID(request.SessionID) && renameName.MatchString(request.Name) &&
 		epochValue.MatchString(request.Epoch) && treeRevisionValue.MatchString(request.Revision) && request.Confirmed
@@ -33,21 +49,7 @@ func RenameWindowCommand(host, socket, windowID string, request RenameWindowRequ
 	if inv.Epoch != request.Epoch {
 		return "", ErrChanged
 	}
-	var session *Session
-	var window *Window
-	links := 0
-	for i := range inv.Sessions {
-		current := &inv.Sessions[i]
-		for j := range current.Windows {
-			candidate := &current.Windows[j]
-			if candidate.ID == windowID {
-				links++
-				if current.ID == request.SessionID {
-					session, window = current, candidate
-				}
-			}
-		}
-	}
+	session, window, links := findWindowLink(inv, request.SessionID, windowID)
 	if window == nil {
 		return "", ErrNotFound
 	}

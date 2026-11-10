@@ -18,6 +18,7 @@ type Config struct {
 	PaneSnapshotEnabled     bool
 	MutationsEnabled        bool
 	WindowMutationsEnabled  bool
+	LayoutMutationsEnabled  bool
 	SessionLifecycleEnabled bool
 	AllowedSSHHosts         map[string]bool
 }
@@ -53,6 +54,10 @@ func Load() (Config, error) {
 	c.WindowMutationsEnabled, err = strconv.ParseBool(env("TMUX_MONITOR_WINDOW_MUTATIONS_ENABLED", "false"))
 	if err != nil {
 		return c, fmt.Errorf("TMUX_MONITOR_WINDOW_MUTATIONS_ENABLED must be true or false")
+	}
+	c.LayoutMutationsEnabled, err = strconv.ParseBool(env("TMUX_MONITOR_LAYOUT_MUTATIONS_ENABLED", "false"))
+	if err != nil {
+		return c, fmt.Errorf("TMUX_MONITOR_LAYOUT_MUTATIONS_ENABLED must be true or false")
 	}
 	return c, c.Validate()
 }

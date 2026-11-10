@@ -48,6 +48,7 @@ type Server struct {
 	mutations            sessionRenamer
 	lifecycle            sessionLifecycle
 	windowMutations      windowMutator
+	layoutMutations      layoutMutator
 	viewMu               sync.Mutex
 	tickets              map[string]terminalTicket
 	viewers              map[string]*terminalViewer
@@ -70,6 +71,7 @@ func New(db *sql.DB, cfg config.Config, assets fs.FS, logger *slog.Logger) *Serv
 	s.mutations = manager
 	s.lifecycle = manager
 	s.windowMutations = manager
+	s.layoutMutations = manager
 	api := http.NewServeMux()
 	api.HandleFunc("POST /api/v1/auth/login", s.login)
 	api.HandleFunc("POST /api/v1/auth/logout", s.logout)
@@ -83,12 +85,15 @@ func New(db *sql.DB, cfg config.Config, assets fs.FS, logger *slog.Logger) *Serv
 	api.HandleFunc("DELETE /api/v1/hosts/{id}", s.deleteHost)
 	api.HandleFunc("GET /api/v1/hosts/{id}/inventory", s.inventory)
 	api.HandleFunc("POST /api/v1/hosts/{id}/panes/{pid}/snapshot", s.capturePane)
+	api.HandleFunc("POST /api/v1/hosts/{id}/panes/{pid}/split", s.splitPane)
+	api.HandleFunc("DELETE /api/v1/hosts/{id}/panes/{pid}", s.killPane)
 	api.HandleFunc("GET /api/v1/hosts/{id}/session-options", s.sessionOptions)
 	api.HandleFunc("PATCH /api/v1/hosts/{id}/sessions/{sid}", s.renameSession)
 	api.HandleFunc("POST /api/v1/hosts/{id}/sessions", s.createSession)
 	api.HandleFunc("DELETE /api/v1/hosts/{id}/sessions/{sid}", s.killSession)
 	api.HandleFunc("POST /api/v1/hosts/{id}/sessions/{sid}/windows", s.createWindow)
 	api.HandleFunc("PATCH /api/v1/hosts/{id}/windows/{wid}", s.renameWindow)
+	api.HandleFunc("DELETE /api/v1/hosts/{id}/windows/{wid}", s.killWindow)
 	api.HandleFunc("GET /api/v1/audit", s.listAudit)
 	api.HandleFunc("GET /api/v1/terminal/options", s.terminalOptions)
 	api.HandleFunc("POST /api/v1/terminal/tickets", s.terminalTicket)
