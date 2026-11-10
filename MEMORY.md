@@ -644,6 +644,7 @@ diff dilakukan tanpa menyentuh `.env`, `.data`, host, atau proses pengguna.
 
 Baseline `81089f0`. Status **BELUM DIUJI** sesuai instruksi pengguna. Pekerjaan
 meliputi perubahan source, formatting dan review diff. Push memakai `[skip ci]`.
+Commit source `bc3f7a3` sudah dipush ke `main` melalui SSH.
 
 1. `PATCH /hosts/{id}/windows/{wid}` memakai Origin, CSRF, login, izin read/write
    dan kunci idempotensi. Body memakai session ID, nama baru, epoch, revision
