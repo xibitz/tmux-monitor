@@ -76,6 +76,8 @@ type Hello struct {
 	Socket             string `json:"socket"`
 	Tmux               string `json:"tmuxVersion"`
 	Inventory          bool   `json:"inventory"`
+	ControlEvents      bool   `json:"controlEvents,omitempty"`
+	CodingHooks        bool   `json:"codingHooks,omitempty"`
 	Terminal           bool   `json:"terminal,omitempty"`
 	InstanceID         string `json:"instanceId,omitempty"`
 	PreviousGeneration int64  `json:"previousGeneration,omitempty"`
@@ -87,6 +89,8 @@ type HelloAck struct {
 	AgentID          string `json:"agentId"`
 	Generation       int64  `json:"generation"`
 	HeartbeatSeconds int    `json:"heartbeatSeconds,omitempty"`
+	ControlEvents    bool   `json:"controlEvents,omitempty"`
+	CodingHooks      bool   `json:"codingHooks,omitempty"`
 }
 
 type Request struct {

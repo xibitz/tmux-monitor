@@ -312,3 +312,34 @@ func digest(prefix string, parts ...string) string {
 	}
 	return prefix + hex.EncodeToString(h.Sum(nil))
 }
+
+// CodingPane binds a hook's local TMUX context to the current inventory. A
+// pane linked into multiple sessions is intentionally left unattributed.
+func CodingPane(inv Inventory, output []byte, socketPath, serverPID, paneID string) (string, string, string) {
+	first, _, _ := strings.Cut(string(output), "\n")
+	fields := fingerprintFields(first)
+	if !validFingerprint(fields) || fields[1] != serverPID || !ValidPaneID(paneID) || inv.Epoch == "" {
+		return "", "", ""
+	}
+	path, err := unquote(fields[3])
+	if err != nil || path != socketPath {
+		return "", "", ""
+	}
+	var sessionID string
+	for _, session := range inv.Sessions {
+		for _, window := range session.Windows {
+			for _, pane := range window.Panes {
+				if pane.ID == paneID {
+					if sessionID != "" {
+						return "", "", ""
+					}
+					sessionID = session.ID
+				}
+			}
+		}
+	}
+	if sessionID == "" {
+		return "", "", ""
+	}
+	return inv.Epoch, sessionID, paneID
+}

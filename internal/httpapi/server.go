@@ -50,6 +50,9 @@ type Server struct {
 	windowMutations      windowMutator
 	layoutMutations      layoutMutator
 	agents               agentConnections
+	eventStreams         chan struct{}
+	pushSlots            chan struct{}
+	pushKeyMu            sync.Mutex
 	viewMu               sync.Mutex
 	tickets              map[string]terminalTicket
 	viewers              map[string]*terminalViewer
@@ -64,6 +67,8 @@ type Server struct {
 
 func New(db *sql.DB, cfg config.Config, assets fs.FS, logger *slog.Logger) *Server {
 	s := &Server{db: db, cfg: cfg, assets: assets, log: logger, tickets: map[string]terminalTicket{}, viewers: map[string]*terminalViewer{}, terminalInterval: 2 * time.Second, terminalPingInterval: 5 * time.Second, terminalPingTimeout: 5 * time.Second}
+	s.eventStreams = make(chan struct{}, 12)
+	s.pushSlots = make(chan struct{}, 2)
 	s.terminalRoot, s.stopTerminals = context.WithCancel(context.Background())
 	s.agents = agentConnections{peers: make(map[string]*agentPeer), handshakes: make(chan struct{}, 8), snapshots: make(chan struct{}, 4)}
 	manager := sshconnector.New(s.credentials(), cfg.AllowedSSHHosts)
@@ -100,6 +105,9 @@ func New(db *sql.DB, cfg config.Config, assets fs.FS, logger *slog.Logger) *Serv
 	api.HandleFunc("PATCH /api/v1/hosts/{id}/windows/{wid}", s.renameWindow)
 	api.HandleFunc("DELETE /api/v1/hosts/{id}/windows/{wid}", s.killWindow)
 	api.HandleFunc("GET /api/v1/audit", s.listAudit)
+	api.HandleFunc("GET /api/v1/notifications", s.codingNotices)
+	api.HandleFunc("GET /api/v1/notifications/push", s.pushOptions)
+	api.HandleFunc("POST /api/v1/notifications/push", s.updatePushSubscription)
 	api.HandleFunc("GET /api/v1/terminal/options", s.terminalOptions)
 	api.HandleFunc("POST /api/v1/terminal/tickets", s.terminalTicket)
 	api.HandleFunc("POST /api/v1/terminal/viewers/{viewer}/mode-tickets", s.terminalModeTicket)
@@ -112,6 +120,7 @@ func New(db *sql.DB, cfg config.Config, assets fs.FS, logger *slog.Logger) *Serv
 	root.Handle("/api/", s.authorize(api))
 	root.HandleFunc("GET /ws/v1/agent", s.agentUpgrade)
 	root.HandleFunc("GET /ws/v1/agent/terminal", s.agentTerminalUpgrade)
+	root.Handle("GET /ws/v1/events", s.authorize(http.HandlerFunc(s.inventoryEvents)))
 	root.Handle("GET /ws/v1/terminal", s.authorize(http.HandlerFunc(s.terminalUpgrade)))
 	root.Handle("/ws/", s.authorize(api))
 	root.HandleFunc("/", s.static)
@@ -186,7 +195,7 @@ func (s *Server) authorize(next http.Handler) http.Handler {
 				s.fail(w, r, 403, "forbidden", "Origin tidak diizinkan.")
 				return
 			}
-			if !(r.Method == http.MethodGet && r.URL.Path == "/ws/v1/terminal") && subtle.ConstantTimeCompare([]byte(r.Header.Get("X-CSRF-Token")), []byte(identity.CSRF(cookie.Value))) != 1 {
+			if !(r.Method == http.MethodGet && (r.URL.Path == "/ws/v1/terminal" || r.URL.Path == "/ws/v1/events")) && subtle.ConstantTimeCompare([]byte(r.Header.Get("X-CSRF-Token")), []byte(identity.CSRF(cookie.Value))) != 1 {
 				s.fail(w, r, 403, "forbidden", "Token CSRF tidak berlaku.")
 				return
 			}

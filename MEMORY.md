@@ -19,7 +19,7 @@ Pengguna meminta development diteruskan dan status ditulis agar agent baru bisa
 melanjutkan tanpa mengandalkan riwayat chat. **Memory ini wajib diperbarui setelah
 checkpoint, sebelum berhenti, dan sebelum context/token habis.**
 
-Yang sudah tersedia: hub localhost-only, SQLite WAL/migrasi source001–007, bootstrap
+Yang sudah tersedia: hub localhost-only, SQLite WAL/migrasi source001–008, bootstrap
 admin, Argon2id/cookie sesi, ACL/CSRF/Origin, profil host, audit, UI responsif,
 allowlist SSH, Makefile/CI, **key store + CLI SSH configure/revoke, public host
 key pinning, probe dan inventaris tmux dengan epoch/revision serta cache stale**,
@@ -54,7 +54,7 @@ Baseline sebelum irisan T12: `33466f0` (SSH/inventaris); dokumentasi awal handof
 `b7b8c1c`. Sebelumnya `1d8c1cf` (UX allowlist), `5c99762` (fondasi), `a879f8c`
 (rancangan). Commit dokumentasi sesudah kode tidak mengubah implementasinya.
 
-**T00, T10, T11 DONE. T02/T03/T12/T13/T20/T21/T22/T23/T24/T30/T31/T32/T33/T34 PARTIAL. Task lain TODO.
+**T00, T10, T11 DONE. T02/T03/T12/T13/T20/T21/T22/T23/T24/T30/T31/T32/T33/T34/T40/T41/T42/T50/T51/T52/T60 PARTIAL. Task lain TODO.
 Berikutnya paritas mutasi Agent T20/T21; gate testing T20–T24 dan perangkat tetap terbuka.**
 DONE pada T10/T11 berarti acceptance kode/automated tests yang dicatat telah
 lulus, bukan bukti sshd/tailnet/HP pengguna sudah diuji. Konektor Agent memiliki source inventaris dan PTY; M1 dan gate rilis P0 belum selesai. Terminal memerlukan
@@ -860,6 +860,51 @@ dan review diff. Commit/push memakai `[skip ci]`.
    pengujian sampai instruksi pengguna berubah. Deployment dan data pengguna
    tidak disentuh.
 
+## Checkpoint T40–T42, T50–T52 dan T60 (10 November)
+
+Baseline `f433a5f`. Status **BELUM DIUJI**. Ikuti instruksi tanpa testing.
+Fixture/fuzz T40 ditulis sesuai task, tanpa menjalankan test, build, browser,
+migrasi, koneksi tmux, hook CLI, Web Push, benchmark atau CI. Commit memakai
+`[skip ci]`.
+
+1. **T40/T41.** Mulai dari `internal/tmux/control_mode.go`, parser berbatas
+   baris yang menangani guard respons, %error, notifikasi dan byte octal.
+   Dua adapter memakai katalog tmux tanpa input/pane output/resize. Hub
+   melayani `/ws/v1/events` dengan cookie, Origin, ACL, fencing profil/key dan
+   batas stream. Agent menegosiasikan flag di v2, tanpa mengubah v1/default.
+   UI hanya membuka stream setelah inventaris dimuat dan opt-in aktif.
+   Sequence/generation berubah dan koneksi baru memicu snapshot penuh.
+   Polling GET tetap tersedia tanpa stream, tanpa replay event.
+2. **T42.** Pertahankan `independentPane=false`. UI menjelaskan live pane
+   diblokir sampai isolasi desktop dibuktikan. Snapshot pane SSH T21 tetap
+   tersedia pada host yang mendukung. Jangan sambungkan parser pane output
+   ke WebSocket atau mengirim perintah resize/selection tanpa spike tmux dan
+   verifikasi ukuran, target, backpressure, output gap serta dua klien.
+3. **T50/T51.** Schema008 menyimpan metadata inbox terbatas. Hub mengikat
+   event ke Agent identity/generation aktif dan menerapkan ACL inbox.
+   `agent notify` menyaring input Codex argv dan Claude stdin ke skema 1.
+   Agent menerima dari socket owner-only di direktori 0700 saat WSS aktif.
+   Lokasi hanya dikirim jika socket path/PID dan pane unik cocok dengan
+   inventaris. Hub memerlukan epoch aktif yang segar untuk menampilkan lokasi;
+   selain itu confidence unknown. Isi hook mentah tidak dikirim atau disimpan.
+4. **T52.** Inbox polling dan badge baru tersedia. Web Push bersifat opt-in
+   terpisah, VAPID + body kosong, provider HTTPS terbatas, endpoint terenkripsi
+   di SQLite, dan key owner-only `web-push.key`. Service worker hanya
+   menampilkan judul umum dan membuka inbox lokal. Lihat konfigurasi dan
+   pemulihan key di `docs/coding-notifications.md`.
+5. **T60.** Satu panel host dapat menyimpan empat tab session. Hanya viewer
+   tab aktif yang dipasang, perpindahan melepas koneksi lama dan membuka
+   read-only. Batas backend empat viewer aktif per akun tetap berlaku.
+   Favorit berisi ID host per akun/per browser. Pencarian memfilter pohon
+   inventaris lokal. Rencana pengukuran ada di `docs/release-qualification.md`.
+6. Setelah testing diizinkan, mulai dari compile dan migrasi 007→008→007
+   pada DB sementara, fixture dan fuzz parser, tmux Linux/macOS terisolasi,
+   event burst/gap/revoke, lalu gate dua klien dan CLI nyata. Periksa ACL,
+   dedupe, fallback unknown, drop tanpa replay, service worker PWA, push
+   per provider/izin, serta penggunaan RAM/CPU/bandwidth. Tuning hanya
+   setelah baseline tercatat. Data, konfigurasi dan proses pengguna tidak
+   disentuh.
+
 ## Titik lanjut tepat
 
 1. Baca hasil CI/commit checkpoint interactive terbaru. Cek git status dan
@@ -893,7 +938,7 @@ hostname atau fingerprint pribadi pengguna yang dicatat dalam repositori.
 Backend pengguna tidak direstart atau dimigrasi oleh agent pada pekerjaan ini.
 Untuk memakai source terbaru: hentikan backend lama, backup data penting, muat
 .env di terminal backend, lalu jalankan kembali `make dev` (atau build/binary
-baru). Source startup kini menuju migrasi007 (BELUM DIUJI); jangan menyamakan
+baru). Source startup kini menuju migrasi008 (BELUM DIUJI); jangan menyamakan
 dengan baseline binary/CI schema004. CLI SSH harus memakai TMUX_MONITOR_DATA_DIR
 yang sama. Frontend Vite tetap
 pada 5173; backend 8080 untuk konfigurasi dev yang sekarang didokumentasikan.

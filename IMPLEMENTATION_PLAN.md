@@ -31,13 +31,13 @@ pernyataan bahwa task sudah dikerjakan. Checkbox hanya dicentang jika gate lulus
 | T32 | PARTIAL | Audit dasar dan redaction tests tersedia; filter/retensi/security review/fuzz belum. |
 | T33 | PARTIAL | Paket binary, template service, backup/restore terenkripsi dan runbook tersedia **BELUM DIUJI**. Clean install dan restore lab belum dijalankan. |
 | T34 | PARTIAL | Matriks gangguan dan alat pengukuran read-only tersedia **BELUM DIJALANKAN**. Kapasitas dan gate P0 belum dibuktikan. |
-| T40 | TODO | Parser control mode state machine, fixture dan fuzz. |
-| T41 | TODO | Event bridge dua transport, sequence/resync dan polling fallback. |
-| T42 | TODO | Live pane independen dan pembuktian isolasi klien/ukuran. |
-| T50 | TODO | Skema notifikasi, mapping/confidence/dedupe dan inbox. |
-| T51 | TODO | Hook lokal Codex/Claude berversi dan autentikasi ke Agent. |
-| T52 | TODO | Notifikasi in-app dan Web Push opt-in tanpa isi sensitif. |
-| T60 | TODO | Tab/favorit/pencarian dan tuning berbasis benchmark. |
+| T40 | PARTIAL | Parser control mode, fixture interleaving/escaping/truncation dan fuzz tersedia di source **BELUM DIJALANKAN**. |
+| T41 | PARTIAL | SSH + Agent mengirim invalidation, sequence dan resync snapshot. UI memiliki fallback polling. **BELUM DIUJI**. |
+| T42 | PARTIAL | Live pane tetap nonaktif dengan alasan di UI. Snapshot SSH dan viewer read-only yang sudah ada tetap tersedia. Isolasi dua klien belum dibuktikan. |
+| T50 | PARTIAL | Schema008, inbox berizin, dedupe, retensi dan atribusi lokasi dengan fallback unknown tersedia **BELUM DIUJI**. |
+| T51 | PARTIAL | Adaptor v1 opt-in Codex/Claude, socket lokal privat dan forwarding lewat Agent berpasangan tersedia **BELUM DIUJI**. |
+| T52 | PARTIAL | Inbox in-app dan Web Push opt-in dengan pesan umum, dukungan browser dan fallback inbox tersedia **BELUM DIUJI**. |
+| T60 | PARTIAL | Empat tab per detail host, favorit dan pencarian tersedia **BELUM DIUJI**. Benchmark dan tuning terukur masih terbuka. |
 
 ### Checklist irisan T10–T11
 

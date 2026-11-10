@@ -74,3 +74,25 @@ laporan. Batas viewer, timeout, dan target hanya diubah berdasarkan hasil yang
 diukur. Tahan rilis sampai seluruh FR-01–10, NFR-01–09, dan gate keamanan P0
 di [rencana implementasi](../IMPLEMENTATION_PLAN.md#7-rencana-pengujian-dan-gate-penerimaan)
 terbukti.
+
+## Profil penggunaan tab dan event bridge (T60)
+
+Gunakan host lab dengan beban sintetis yang sama untuk SSH dan Agent.
+Catat versi hub/Agent/tmux/browser, OS, RTT, ukuran viewport dan interval
+sampel. Jalankan setelah pengujian kembali diizinkan.
+
+| Skenario | Ukuran yang dicatat |
+|---|---|
+| Inventaris diam, control events nonaktif vs aktif | CPU dan RSS hub/Agent, byte WebSocket per menit, jumlah GET inventaris |
+| Satu viewer read-only selama idle dan selama burst sintetis | CPU/RSS hub dan Agent, heap browser, byte terminal/menit, latensi render dan jumlah slow consumer |
+| Empat tab session, ulang perpindahan 30 kali dengan satu viewer aktif | P50/P95 waktu sampai viewer siap, RSS awal/akhir, jumlah viewer yang dilepas dan puncak koneksi |
+| Putus Wi-Fi lab saat viewer aktif, lalu buka ulang | Waktu pulih, mode setelah reconnect, byte input yang terkirim ulang dan jumlah viewer yatim |
+| Perubahan eksternal serentak pada dua host | P95 sampai snapshot terbaru terlihat dan jumlah snapshot per host |
+
+Ambil sampel tiap lima detik selama lima menit per skenario. Gunakan
+`ps -p <pid> -o %cpu=,rss=` untuk proses, alat performa browser untuk heap,
+dan penghitung byte atau metadata frame pada koneksi lab untuk bandwidth.
+Catat hanya ukuran, durasi dan jumlah frame. Simpan hasil agregat tanpa
+isi frame, alamat privat, atau identitas host. Jalankan setidaknya tiga kali,
+laporkan median dan P95, lalu ulang setelah perubahan buffer/reconnect
+yang dipilih berdasarkan hasil.

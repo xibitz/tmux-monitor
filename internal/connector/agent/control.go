@@ -12,13 +12,19 @@ import (
 	"github.com/xibitz/tmux-monitor/internal/agentproto"
 )
 
-func (b Binding) controlLoop(parent context.Context, conn *websocket.Conn, client *http.Client, generation int64, heartbeat time.Duration, terminal bool) error {
+func (b Binding) controlLoop(parent context.Context, conn *websocket.Conn, client *http.Client, generation int64, heartbeat time.Duration, options RunOptions, ack agentproto.HelloAck) error {
 	ctx, cancel := context.WithCancel(parent)
 	var wg sync.WaitGroup
 	defer func() {
 		cancel()
 		wg.Wait()
 	}()
+	if options.ControlEvents && ack.ControlEvents {
+		wg.Go(func() { b.controlEvents(ctx, conn, generation) })
+	}
+	if options.HookSocket != "" && ack.CodingHooks {
+		wg.Go(func() { b.listenHooks(ctx, conn, generation, options.HookSocket) })
+	}
 	inventory := make(chan struct{}, 1)
 	viewers := make(chan struct{}, 4)
 	acknowledgements := make(chan uint64, agentproto.MissedHeartbeats)
@@ -77,7 +83,7 @@ func (b Binding) controlLoop(parent context.Context, conn *websocket.Conn, clien
 			})
 		case agentproto.TerminalOpen:
 			var offer agentproto.TerminalOffer
-			if !terminal || agentproto.Decode(data, &offer) != nil || !offer.Valid(b.AgentID, generation, time.Now()) {
+			if !options.Terminal || agentproto.Decode(data, &offer) != nil || !offer.Valid(b.AgentID, generation, time.Now()) {
 				return errors.New("invalid terminal offer")
 			}
 			if !time.Now().Before(offer.Deadline) {

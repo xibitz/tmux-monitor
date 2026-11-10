@@ -13,7 +13,7 @@ The offline page does not use the dynamic, nonce-bearing application HTML.
 
 | Method and path | Authorization | Request / response |
 | --- | --- | --- |
-| `GET /healthz` | Local listener | `{"status":"ok","schemaVersion":7}` in current source (migration007 untested); 503 if storage is unavailable |
+| `GET /healthz` | Local listener | `{"status":"ok","schemaVersion":8}` in current source (migration008 untested); 503 if storage is unavailable |
 | `POST /api/v1/auth/login` | Exact configured Origin, rate limited | `{username,password}` → `{user,csrfToken}` and session cookie; generic 401 for invalid credentials |
 | `GET /api/v1/me` | Session | `{user:{id,username,isAdmin},csrfToken}` |
 | `POST /api/v1/auth/logout` | Session + CSRF | 204; revoke session and expire cookie |
@@ -540,3 +540,43 @@ Errors: 400 malformed JSON, 401 unauthenticated, 403 forbidden/CSRF/Origin,
 429 rate limit, 503 unavailable, 500 internal error. Unknown API/WS endpoints
 require login before returning JSON 404. Terminal upgrades follow the experimental
 contract above and are disabled unless explicitly enabled by the operator.
+
+### Inventory events and pane policy (T40–T42, partial)
+
+`GET /ws/v1/events?hostId=<host-id>` uses the app session cookie, exact browser
+Origin and current `tmux:read` access. It requires
+`TMUX_MONITOR_CONTROL_EVENTS=true`. Each connection has an opaque `stream`
+and strictly increasing `sequence`. The first frame is `resync_required`.
+An `inventory.changed` frame is an invalidation hint. Both frame types ask
+the browser to fetch `GET /api/v1/hosts/{id}/inventory`. Reconnect, sequence
+gaps and Agent generation changes use full snapshots. The server retains no
+event history. The browser periodically falls back to the inventory GET
+when the socket has no valid frames.
+
+SSH uses the pinned connector and a bounded tmux control watcher. Agent v2
+advertises optional `controlEvents` in hello and receives it back when the hub
+enables it. `inventory.changed` from Agent carries `agentId`, `generation` and
+a per-connection sequence. It carries no pane output. The existing Agent
+inventory RPC and periodic reconciliation still work with older Agents.
+`capabilities.controlMode` indicates eligibility to attempt control events.
+`capabilities.independentPane` remains false. No API exposes live pane bytes
+or sends resize/selection commands through the watcher.
+
+### Coding events and notifications (T50–T52, partial)
+
+Agent v2 optionally negotiates `codingHooks`. The authenticated Agent sends
+`coding.event` with its current ID and generation, schema `1`, source, kind,
+and a dedupe digest. Optional epoch/session/pane requires unambiguous local
+context; the hub drops attribution when its fresh epoch cannot corroborate
+the event. The hub assigns host and UTC occurrence time, rate-limits and
+retains up to 200 notices per host in schema008.
+
+- `GET /api/v1/notifications` returns `enabled` and up to 50 `notices`.
+  Access is admin or both `host:read` and `tmux:read` for the event's host.
+  `confidence` is `verified_pane` or `unknown`.
+- `GET /api/v1/notifications/push` returns `enabled` and optional
+  `publicKey` in base64url.
+- `POST /api/v1/notifications/push` accepts `{endpoint, enabled}`. It uses
+  session auth, Origin and CSRF. An endpoint is scoped to one account and
+  subscriptions are limited to four per account. Push delivery is best effort
+  and rechecks host access. The request to the push service has an empty body.

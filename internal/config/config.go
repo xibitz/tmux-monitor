@@ -25,6 +25,9 @@ type Config struct {
 	WindowMutationsEnabled  bool
 	LayoutMutationsEnabled  bool
 	SessionLifecycleEnabled bool
+	ControlEvents           bool
+	CodingHooks             bool
+	WebPush                 bool
 	AllowedSSHHosts         map[string]bool
 }
 
@@ -76,6 +79,19 @@ func Load() (Config, error) {
 	if err != nil {
 		return c, fmt.Errorf("TMUX_MONITOR_LAYOUT_MUTATIONS_ENABLED must be true or false")
 	}
+	for _, flag := range []struct {
+		name  string
+		value *bool
+	}{
+		{"TMUX_MONITOR_CONTROL_EVENTS", &c.ControlEvents},
+		{"TMUX_MONITOR_CODING_HOOKS", &c.CodingHooks},
+		{"TMUX_MONITOR_WEB_PUSH", &c.WebPush},
+	} {
+		*flag.value, err = strconv.ParseBool(env(flag.name, "false"))
+		if err != nil {
+			return c, fmt.Errorf("%s must be true or false", flag.name)
+		}
+	}
 	return c, c.Validate()
 }
 
@@ -104,6 +120,9 @@ func (c Config) Validate() error {
 	}
 	if c.AgentEnabled && !strings.HasSuffix(strings.ToLower(u.Hostname()), ".ts.net") {
 		return fmt.Errorf("Agent requires an HTTPS Tailscale Serve origin")
+	}
+	if c.WebPush && (!c.CodingHooks || c.Development) {
+		return fmt.Errorf("Web Push requires coding hooks and production HTTPS mode")
 	}
 	if strings.TrimSpace(c.DataDir) == "" {
 		return fmt.Errorf("data directory must not be empty")

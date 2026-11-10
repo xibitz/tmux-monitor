@@ -120,6 +120,8 @@ func (s *Server) observe(r *http.Request, h Host, audit bool) (tmux.Inventory, e
 	if err == nil && inv.StatusReason != "" {
 		code = inv.StatusReason
 	}
+	inv.Capabilities.ControlMode = err == nil && s.cfg.ControlEvents && inv.Capabilities.ServerRunning &&
+		tmux.TerminalVersionSupported(inv.Capabilities.TmuxVersion)
 	if err != nil {
 		code = sshconnector.Code(err)
 		state = sshconnector.State(code)

@@ -1,9 +1,18 @@
-import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
+import React, {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import type { FormEvent, ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { TmuxRename } from "./TmuxRename";
 import { AgentSetup } from "./AgentSetup";
 import { registerPWA } from "./pwa";
+import { Notifications, useNotifications } from "./Notifications";
+import { useInventoryEvents } from "./inventoryEvents";
 import { TmuxLayoutMutation, TmuxLifecycle } from "./TmuxLifecycle";
 import { PaneSnapshotViewer } from "./PaneSnapshotViewer";
 import type { PaneSnapshotTarget } from "./PaneSnapshotViewer";
@@ -11,6 +20,7 @@ import {
   Activity,
   ArrowLeft,
   ArrowRight,
+  Bell,
   Check,
   ChevronRight,
   CircleHelp,
@@ -29,6 +39,7 @@ import {
   Search,
   Server,
   ShieldCheck,
+  Star,
   Terminal,
   Trash2,
   WifiOff,
@@ -277,7 +288,40 @@ function Dashboard({
   identity: Identity;
   onLogout: () => void;
 }) {
-  const [tab, setTab] = useState<"hosts" | "audit">("hosts");
+  const [tab, setTab] = useState<"hosts" | "audit" | "inbox">(() =>
+    new URLSearchParams(location.search).get("view") === "inbox"
+      ? "inbox"
+      : "hosts",
+  );
+  const favoriteKey = `tmux-monitor:favorites:${identity.user.id}`;
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    try {
+      const stored: unknown = JSON.parse(
+        localStorage.getItem(favoriteKey) ?? "[]",
+      );
+      if (Array.isArray(stored))
+        return stored
+          .filter(
+            (id): id is string =>
+              typeof id === "string" && /^h_[a-f0-9]{32}$/.test(id),
+          )
+          .slice(0, 100);
+    } catch {
+      // Favorites can still be used in memory when storage is unavailable.
+    }
+    return [];
+  });
+  function toggleFavorite(id: string) {
+    const next = favorites.includes(id)
+      ? favorites.filter((value) => value !== id)
+      : [...favorites, id].slice(-100);
+    setFavorites(next);
+    try {
+      localStorage.setItem(favoriteKey, JSON.stringify(next));
+    } catch {
+      // Device persistence is optional.
+    }
+  }
   const [hosts, setHosts] = useState<Host[]>([]);
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -290,12 +334,23 @@ function Dashboard({
   const [notice, setNotice] = useState("");
   const [loggingOut, setLoggingOut] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
+  const notifications = useNotifications(online, tab === "inbox");
+  const pageTitle =
+    tab === "hosts"
+      ? "Host saya"
+      : tab === "audit"
+        ? "Log aktivitas"
+        : "Notifikasi";
   const [mobile, setMobile] = useState(
     () => window.matchMedia("(max-width: 800px)").matches,
   );
   const loadSequence = useRef(0);
   const hasAgent = hosts.some((host) => host.transport === "agent");
   async function refresh() {
+    if (tab === "inbox") {
+      notifications.reload();
+      return;
+    }
     const sequence = ++loadSequence.current;
     setLoading(true);
     setError("");
@@ -320,6 +375,12 @@ function Dashboard({
       setEvents([]);
       setSelected(undefined);
       setAdding(false);
+      return;
+    }
+    if (tab === "inbox") {
+      loadSequence.current++;
+      setLoading(false);
+      setError("");
       return;
     }
     void refresh();
@@ -418,7 +479,9 @@ function Dashboard({
   }
   const visibleHosts = hosts.filter(
     (host) =>
-      (filter === "all" || host.transport === filter) &&
+      (filter === "all" ||
+        host.transport === filter ||
+        (filter === "favorites" && favorites.includes(host.id))) &&
       `${host.label} ${host.tailnetAddress} ${host.environment}`
         .toLowerCase()
         .includes(query.toLowerCase()),
@@ -463,6 +526,19 @@ function Dashboard({
           >
             <Server size={18} />
             Host saya<span className="nav-count">{hosts.length}</span>
+          </button>
+          <button
+            className={tab === "inbox" ? "nav-item active" : "nav-item"}
+            aria-current={tab === "inbox" ? "page" : undefined}
+            onClick={() => {
+              setTab("inbox");
+              setMenuOpen(false);
+              setNotice("");
+            }}
+          >
+            <Bell size={18} />
+            Notifikasi
+            {notifications.unread && <span className="nav-count">Baru</span>}
           </button>
           {identity.user.isAdmin && (
             <button
@@ -520,7 +596,7 @@ function Dashboard({
             </button>
             <span>Workspace</span>
             <ChevronRight size={14} />
-            <strong>{tab === "hosts" ? "Host saya" : "Log aktivitas"}</strong>
+            <strong>{pageTitle}</strong>
           </div>
           <span className="topbar-label">
             <span className="small-dot" /> PRIVATE WORKSPACE
@@ -531,13 +607,15 @@ function Dashboard({
             <div>
               <span className="eyebrow">WORKSPACE OVERVIEW</span>
               <h1>
-                {tab === "hosts" ? "Host saya" : "Log aktivitas"}
+                {pageTitle}
                 <span className="heading-dot">.</span>
               </h1>
               <p>
                 {tab === "hosts"
                   ? "Semua host Anda, dalam satu tempat."
-                  : "Jejak akses dan perubahan di ruang kerja Anda."}
+                  : tab === "audit"
+                    ? "Jejak akses dan perubahan di ruang kerja Anda."
+                    : "Peristiwa dari Codex dan Claude Code."}
               </p>
             </div>
             {tab === "hosts" && identity.user.isAdmin && (
@@ -591,6 +669,7 @@ function Dashboard({
                     ["all", "Semua host"],
                     ["ssh", "SSH"],
                     ["agent", "Agent"],
+                    ["favorites", "Favorit"],
                   ].map(([value, label]) => (
                     <button
                       key={value}
@@ -681,7 +760,12 @@ function Dashboard({
                         </span>
                         <HostBadge host={host} />
                       </div>
-                      <h2>{host.label}</h2>
+                      <h2>
+                        {favorites.includes(host.id) && (
+                          <Star size={15} aria-label="Favorit" />
+                        )}{" "}
+                        {host.label}
+                      </h2>
                       <p className="host-address">
                         {host.tailnetAddress || "Koneksi melalui Agent"}
                       </p>
@@ -709,12 +793,14 @@ function Dashboard({
                   <p>
                     Siapkan key SSH dan host key terverifikasi melalui CLI
                     lokal, lalu periksa koneksi di detail host. Viewer read-only
-                    eksperimental dapat diaktifkan operator. Agent menyusul.
+                    eksperimental dapat diaktifkan operator.
                   </p>
                 </div>
                 <span className="subtle-tag">SSH WORKSPACE</span>
               </div>
             </>
+          ) : tab === "inbox" ? (
+            <Notifications {...notifications} />
           ) : (
             <section className="audit-panel">
               <div className="panel-heading">
@@ -800,7 +886,10 @@ function Dashboard({
       )}
       {selected && (
         <HostDetails
+          key={selected.id}
           host={selected}
+          favorite={favorites.includes(selected.id)}
+          onFavorite={() => toggleFavorite(selected.id)}
           canDelete={identity.user.isAdmin}
           onUpdated={(updated) => {
             setSelected((current) =>
@@ -1243,12 +1332,16 @@ function HostBadge({ host }: { host: Host }) {
 }
 function HostDetails({
   host,
+  favorite,
+  onFavorite,
   canDelete,
   onClose,
   onDeleted,
   onUpdated,
 }: {
   host: Host;
+  favorite: boolean;
+  onFavorite: () => void;
   canDelete: boolean;
   onClose: () => void;
   onDeleted: () => void;
@@ -1317,22 +1410,44 @@ function HostDetails({
       active = false;
     };
   }, [host.id, host.transport]);
-  const [terminalSession, setTerminalSession] = useState<{
-    id: string;
-    name: string;
-  }>();
+  const [terminalTabs, setTerminalTabs] = useState<
+    { id: string; name: string; epoch: string }[]
+  >([]);
+  const [activeTerminal, setActiveTerminal] = useState<string>();
+  const [sessionQuery, setSessionQuery] = useState("");
+  const [controlEvents, setControlEvents] = useState(false);
+  const terminalSession = terminalTabs.find(
+    (session) =>
+      session.id === activeTerminal && session.epoch === inventory?.epoch,
+  );
+  function openTerminal(session: { id: string; name: string }) {
+    if (!inventory?.epoch || inventory.stale) return;
+    const current = terminalTabs.filter(
+      (item) => item.epoch === inventory.epoch,
+    );
+    const existing = current.find((item) => item.id === session.id);
+    if (!existing && current.length >= 4) return;
+    if (!existing)
+      setTerminalTabs([
+        ...current,
+        { id: session.id, name: session.name, epoch: inventory.epoch },
+      ]);
+    setActiveTerminal(session.id);
+  }
   useEffect(() => {
     let active = true;
     void api<{
       enabled: boolean;
       paneSnapshotEnabled?: boolean;
       agentTerminalEnabled?: boolean;
+      controlEvents?: boolean;
     }>("/terminal/options")
       .then((value) => {
         if (active) {
           setTerminalEnabled(value.enabled);
           setAgentTerminalEnabled(value.agentTerminalEnabled === true);
           setPaneSnapshotEnabled(value.paneSnapshotEnabled === true);
+          setControlEvents(value.controlEvents === true);
         }
       })
       .catch(() => {});
@@ -1342,6 +1457,48 @@ function HostDetails({
   }, []);
   const [observationError, setObservationError] = useState("");
   const id = encodeURIComponent(host.id);
+  const refreshing = useRef(0);
+  const liveInventory = useCallback(async () => {
+    const version = ++refreshing.current;
+    try {
+      const latest = await api<Inventory>(`/hosts/${id}/inventory`);
+      if (version === refreshing.current) {
+        setInventory(latest);
+        setObservationError("");
+      }
+    } catch (error) {
+      if (version !== refreshing.current) return;
+      if (error instanceof APIError && error.status === 429) return;
+      if (error instanceof APIError && [401, 403, 404].includes(error.status)) {
+        setInventory(undefined);
+        setPaneSnapshotTarget(undefined);
+        setTerminalTabs([]);
+        setActiveTerminal(undefined);
+      } else {
+        setInventory((current) =>
+          current
+            ? { ...current, stale: true, statusReason: "refresh_failed" }
+            : current,
+        );
+      }
+      setObservationError((error as Error).message);
+    }
+  }, [id]);
+  useInventoryEvents(
+    host.id,
+    controlEvents && !!inventory && !busy && !confirm,
+    liveInventory,
+  );
+  const epoch = inventory?.epoch;
+  useEffect(() => {
+    if (!epoch) return;
+    setTerminalTabs((current) =>
+      current.filter((session) => session.epoch === epoch),
+    );
+    setPaneSnapshotTarget((current) =>
+      current?.epoch === epoch ? current : undefined,
+    );
+  }, [epoch]);
   useEffect(() => {
     if (host.transport !== "ssh" || !canDelete) return;
     let active = true;
@@ -1375,6 +1532,7 @@ function HostDetails({
     }
   }
   async function inspect() {
+    refreshing.current++;
     setPaneSnapshotTarget(undefined);
     setBusy(true);
     setObservationError("");
@@ -1448,6 +1606,23 @@ function HostDetails({
       }
     }
   }
+  const search = sessionQuery.trim().toLowerCase();
+  const visibleSessions =
+    inventory?.sessions.filter(
+      (session) =>
+        !search ||
+        session.name.toLowerCase().includes(search) ||
+        session.id.includes(search) ||
+        session.windows.some(
+          (window) =>
+            window.name.toLowerCase().includes(search) ||
+            window.panes.some(
+              (pane) =>
+                pane.id.includes(search) ||
+                pane.command.toLowerCase().includes(search),
+            ),
+        ),
+    ) ?? [];
   return (
     <Modal
       title={confirm ? "Hapus profil host?" : host.label}
@@ -1458,15 +1633,64 @@ function HostDetails({
       }}
     >
       {error && <ErrorNotice>{error}</ErrorNotice>}
+      {!confirm && terminalTabs.length > 0 && (
+        <nav className="terminal-tabs" aria-label="Tab terminal">
+          <button
+            className="button secondary"
+            aria-pressed={!terminalSession && !selectedPaneSnapshot}
+            onClick={() => {
+              setActiveTerminal(undefined);
+              setPaneSnapshotTarget(undefined);
+            }}
+          >
+            Inventaris
+          </button>
+          {terminalTabs.map((item) => (
+            <div className="terminal-tab" key={item.id}>
+              <button
+                className="button secondary"
+                aria-pressed={terminalSession?.id === item.id}
+                disabled={inventory?.stale || inventory?.epoch !== item.epoch}
+                onClick={() => {
+                  setPaneSnapshotTarget(undefined);
+                  setActiveTerminal(item.id);
+                }}
+              >
+                {item.name}
+              </button>
+              <button
+                className="icon-button bordered"
+                aria-label={`Tutup tab ${item.name}`}
+                onClick={() => {
+                  if (activeTerminal === item.id) setActiveTerminal(undefined);
+                  setTerminalTabs((current) =>
+                    current.filter((session) => session.id !== item.id),
+                  );
+                }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ))}
+        </nav>
+      )}
+      {!terminalSession &&
+        !selectedPaneSnapshot &&
+        terminalTabs.length >= 4 && (
+          <p className="panel-description" role="status">
+            Empat tab sudah terbuka. Tutup satu tab untuk membuka session lain.
+          </p>
+        )}
       {terminalSession && inventory ? (
         <Suspense fallback={<p>Memuat viewer…</p>}>
           <TerminalViewer
+            key={`${terminalSession.epoch}:${terminalSession.id}`}
             hostId={host.id}
             hostLabel={host.label}
             sessionId={terminalSession.id}
             sessionName={terminalSession.name}
             epoch={inventory.epoch}
-            onBack={() => setTerminalSession(undefined)}
+            onBack={() => setActiveTerminal(undefined)}
           />
         </Suspense>
       ) : selectedPaneSnapshot ? (
@@ -1510,6 +1734,14 @@ function HostDetails({
         <>
           <div className="detail-status">
             <HostBadge host={host} />
+            <button
+              className="button secondary"
+              aria-pressed={favorite}
+              onClick={onFavorite}
+            >
+              <Star size={15} />
+              {favorite ? "Hapus dari favorit" : "Tandai favorit"}
+            </button>
             <p>
               {host.observedAt
                 ? `Inventaris terakhir diobservasi ${formatTime(host.observedAt)}.`
@@ -1662,6 +1894,25 @@ function HostDetails({
                 Diambil {formatTime(inventory.observedAt)} ·{" "}
                 {inventory.sessions.length} session
               </p>
+              {inventory.capabilities.serverRunning &&
+                !inventory.capabilities.independentPane && (
+                  <p className="panel-description">
+                    Live pane independen dinonaktifkan sampai isolasi dari klien
+                    desktop terverifikasi. Snapshot read-only tersedia pada host
+                    SSH yang mendukungnya.
+                  </p>
+                )}
+              {inventory.sessions.length > 0 && (
+                <label className="search-field">
+                  <Search size={16} />
+                  <input
+                    aria-label="Cari session, window, atau pane"
+                    placeholder="Cari session, window, atau pane…"
+                    value={sessionQuery}
+                    onChange={(event) => setSessionQuery(event.target.value)}
+                  />
+                </label>
+              )}
               {(inventory.stale || agentInventoryOutdated) && (
                 <div className="error-notice" role="status">
                   {inventory.stale
@@ -1682,7 +1933,7 @@ function HostDetails({
                 )}
               {canCreate && (
                 <TmuxLifecycle
-                  key={inventory.observedAt + ":create"}
+                  key={inventory.createRevision + ":create"}
                   mode="create"
                   hostId={host.id}
                   epoch={inventory.epoch}
@@ -1714,9 +1965,11 @@ function HostDetails({
                     ? "Belum ada session pada socket ini."
                     : "Host terhubung. Belum ada server tmux aktif pada socket ini."}
                 </p>
+              ) : visibleSessions.length === 0 ? (
+                <p className="inventory-empty">Tidak ada session yang cocok.</p>
               ) : (
                 <ul className="session-list">
-                  {inventory.sessions.map((session) => (
+                  {visibleSessions.map((session) => (
                     <li key={session.id}>
                       <div className="session-heading">
                         <Terminal size={16} />
@@ -1725,8 +1978,15 @@ function HostDetails({
                         {terminalAvailable && (
                           <button
                             className="button secondary"
-                            disabled={inventory.stale || busy}
-                            onClick={() => setTerminalSession(session)}
+                            disabled={
+                              inventory.stale ||
+                              busy ||
+                              (terminalTabs.length >= 4 &&
+                                !terminalTabs.some(
+                                  (item) => item.id === session.id,
+                                ))
+                            }
+                            onClick={() => openTerminal(session)}
                           >
                             Buka terminal read-only
                           </button>
@@ -1734,7 +1994,7 @@ function HostDetails({
                       </div>
                       {canRename && session.renameRevision && (
                         <TmuxRename
-                          key={inventory.observedAt + session.id}
+                          key={session.renameRevision + session.id}
                           hostId={host.id}
                           target={{
                             kind: "session",
@@ -1756,7 +2016,7 @@ function HostDetails({
                       )}
                       {canKill && session.revision && (
                         <TmuxLifecycle
-                          key={inventory.observedAt + session.id + ":kill"}
+                          key={session.revision + ":kill"}
                           mode="kill"
                           hostId={host.id}
                           epoch={inventory.epoch}
@@ -1775,9 +2035,7 @@ function HostDetails({
                       )}
                       {canCreateWindow && session.revision && (
                         <TmuxLifecycle
-                          key={
-                            inventory.observedAt + session.id + ":create-window"
-                          }
+                          key={session.revision + ":create-window"}
                           mode="create-window"
                           hostId={host.id}
                           epoch={inventory.epoch}
@@ -1811,7 +2069,7 @@ function HostDetails({
                               windowLinks.get(window.id) === 1 &&
                               window.revision && (
                                 <TmuxRename
-                                  key={inventory.observedAt + window.revision}
+                                  key={inventory.epoch + window.revision}
                                   hostId={host.id}
                                   target={{
                                     kind: "window",
@@ -1838,7 +2096,7 @@ function HostDetails({
                               windowLinks.get(window.id) === 1 &&
                               window.revision && (
                                 <TmuxLayoutMutation
-                                  key={`${inventory.observedAt}:${window.revision}:kill-window`}
+                                  key={`${inventory.epoch}:${window.revision}:kill-window`}
                                   mode="kill-window"
                                   hostId={host.id}
                                   sessionId={session.id}
@@ -1896,7 +2154,7 @@ function HostDetails({
                                       <div className="pane-mutations">
                                         {layout?.canSplitPane && (
                                           <TmuxLayoutMutation
-                                            key={`${inventory.observedAt}:${window.revision}:split`}
+                                            key={`${inventory.epoch}:${window.revision}:split`}
                                             mode="split-pane"
                                             hostId={host.id}
                                             sessionId={session.id}
@@ -1911,7 +2169,7 @@ function HostDetails({
                                         {layout?.canKillPane &&
                                           window.panes.length > 1 && (
                                             <TmuxLayoutMutation
-                                              key={`${inventory.observedAt}:${window.revision}:kill-pane`}
+                                              key={`${inventory.epoch}:${window.revision}:kill-pane`}
                                               mode="kill-pane"
                                               hostId={host.id}
                                               sessionId={session.id}

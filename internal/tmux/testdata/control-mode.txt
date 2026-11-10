@@ -1,0 +1,10 @@
+%begin 1700000000 8 0
+%output %7 literal command output
+%end 1700000000 8 0
+%sessions-changed
+%output %7 hello\015\012\134
+%begin 1700000001 9 1
+no such target
+%error 1700000001 9 1
+%extended-output %7 12 future : \033[32m
+%exit

@@ -30,6 +30,9 @@ func main() {
 }
 
 func run(ctx context.Context, args []string) error {
+	if len(args) != 0 && args[0] == "notify" {
+		return agent.NotifyHook(ctx, args[1:], os.Stdin)
+	}
 	if len(args) == 0 || (args[0] != "enroll" && args[0] != "run") {
 		return errors.New("usage: agent [enroll|run] --credential-file PATH")
 	}
@@ -43,6 +46,8 @@ func run(ctx context.Context, args []string) error {
 	flags := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	path := flags.String("credential-file", "", "owner-only credential file")
 	if args[0] == "run" {
+		controlEvents := flags.Bool("control-events", false, "watch tmux control-mode inventory changes")
+		hookSocket := flags.String("hook-socket", "", "absolute local notification socket in an owner-only directory")
 		enableTerminal := flags.Bool("terminal", false, "allow local tmux terminal viewers from the paired hub")
 		if err := flags.Parse(args[1:]); err != nil {
 			return err
@@ -57,7 +62,14 @@ func run(ctx context.Context, args []string) error {
 		if binding.OSUser != account.Username {
 			return errors.New("local OS user differs from the enrolled profile")
 		}
-		return binding.Run(ctx, runtime.GOOS, *enableTerminal)
+		if *hookSocket != "" {
+			if err := agent.ValidateHookPath(*hookSocket); err != nil {
+				return err
+			}
+		}
+		return binding.Run(ctx, runtime.GOOS, agent.RunOptions{
+			Terminal: *enableTerminal, ControlEvents: *controlEvents, HookSocket: *hookSocket,
+		})
 	}
 
 	hub := flags.String("hub", "", "HTTPS Tailscale Serve origin")

@@ -61,6 +61,8 @@ func (s *Server) refreshAgent(ctx context.Context, p *agentPeer, audit *http.Req
 	}
 	inv.Capabilities.PTYAttach = snapshotErr == nil && s.agentTerminalEnabled() && p.terminal &&
 		inv.Capabilities.ServerRunning && tmux.TerminalVersionSupported(inv.Capabilities.TmuxVersion)
+	inv.Capabilities.ControlMode = snapshotErr == nil && p.controlEvents && inv.Capabilities.ServerRunning &&
+		tmux.TerminalVersionSupported(inv.Capabilities.TmuxVersion)
 	inv.AgentGeneration = p.generation
 
 	tx, err := s.db.BeginTx(ctx, nil)

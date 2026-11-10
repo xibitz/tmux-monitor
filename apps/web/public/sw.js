@@ -115,3 +115,31 @@ async function buildAsset(request) {
   }
   return response;
 }
+
+// The push body is empty. The worker owns the fixed notification copy and
+// always opens the same-origin inbox, even if an unexpected payload arrives.
+self.addEventListener("push", (event) => {
+  event.waitUntil(
+    self.registration.showNotification("Tmux Monitor", {
+      body: "Ada aktivitas baru di kotak masuk.",
+      icon: "/icon.svg",
+      tag: "tmux-monitor-inbox",
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  if (event.notification.tag !== "tmux-monitor-inbox") return;
+  event.notification.close();
+  const inbox = new URL("/?view=inbox", self.location.origin);
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((clients) => {
+        const existing = clients.find((client) => client.url === inbox.href);
+        return existing
+          ? existing.focus()
+          : self.clients.openWindow(inbox.href);
+      }),
+  );
+});

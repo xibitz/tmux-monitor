@@ -91,7 +91,13 @@ func Enroll(ctx context.Context, hub, token string, profile agentproto.EnrollReq
 	return Binding{Hub: origin, HostID: profile.HostID, AgentID: result.AgentID, OSUser: profile.OSUser, Socket: profile.Socket, Credential: result.Credential}, nil
 }
 
-func (b Binding) Run(ctx context.Context, osName string, enableTerminal bool) error {
+type RunOptions struct {
+	Terminal      bool
+	ControlEvents bool
+	HookSocket    string
+}
+
+func (b Binding) Run(ctx context.Context, osName string, options RunOptions) error {
 	u, err := ValidateHub(b.Hub)
 	if err != nil {
 		return err
@@ -107,7 +113,7 @@ func (b Binding) Run(ctx context.Context, osName string, enableTerminal bool) er
 	defer c.CloseIdleConnections()
 	backoff := time.Second
 	for ctx.Err() == nil {
-		uptime, err := b.connect(ctx, c, u.String(), osName, instance, &generation, enableTerminal)
+		uptime, err := b.connect(ctx, c, u.String(), osName, instance, &generation, options)
 		if ctx.Err() != nil {
 			return nil
 		}
@@ -132,7 +138,7 @@ func (b Binding) Run(ctx context.Context, osName string, enableTerminal bool) er
 
 var errAgentRejected = errors.New("Agent cannot reconnect")
 
-func (b Binding) connect(ctx context.Context, c *http.Client, endpoint, osName, instance string, generation *int64, enableTerminal bool) (time.Duration, error) {
+func (b Binding) connect(ctx context.Context, c *http.Client, endpoint, osName, instance string, generation *int64, options RunOptions) (time.Duration, error) {
 	probe, cancelProbe := context.WithTimeout(ctx, 2*time.Second)
 	version, _ := tmuxVersion(probe)
 	cancelProbe()
@@ -155,7 +161,7 @@ func (b Binding) connect(ctx context.Context, c *http.Client, endpoint, osName, 
 	conn.SetReadLimit(agentproto.ControlLimit)
 	helloCtx, cancelHello := context.WithTimeout(ctx, agentproto.HandshakeTimeout)
 	hello := agentproto.Hello{Type: "hello", Version: agentproto.Version, AgentID: b.AgentID, OS: osName,
-		OSUser: b.OSUser, Socket: b.Socket, Tmux: version, Inventory: true, Terminal: enableTerminal,
+		OSUser: b.OSUser, Socket: b.Socket, Tmux: version, Inventory: true, Terminal: options.Terminal, ControlEvents: options.ControlEvents, CodingHooks: options.HookSocket != "",
 		InstanceID: instance, PreviousGeneration: *generation}
 	err = agentproto.Write(helloCtx, conn, hello)
 	var ack agentproto.HelloAck
@@ -173,6 +179,6 @@ func (b Binding) connect(ctx context.Context, c *http.Client, endpoint, osName, 
 	}
 	*generation = ack.Generation
 	started := time.Now()
-	err = b.controlLoop(ctx, conn, c, ack.Generation, interval, enableTerminal)
+	err = b.controlLoop(ctx, conn, c, ack.Generation, interval, options, ack)
 	return time.Since(started), err
 }

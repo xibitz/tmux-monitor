@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -35,6 +36,10 @@ type agentPeer struct {
 	cancel                     context.CancelFunc
 	ready                      chan struct{}
 	terminal                   bool
+	controlEvents              bool
+	codingHooks                bool
+	eventSequence              atomic.Uint64
+	lastNotice                 time.Time
 	instance                   string
 	heartbeat                  time.Duration
 	reconcile                  chan struct{}
@@ -208,7 +213,9 @@ func (s *Server) agentUpgrade(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		p.instance = hello.InstanceID
-	} else if hello.InstanceID != "" || hello.PreviousGeneration != 0 {
+		p.controlEvents = hello.ControlEvents && s.cfg.ControlEvents
+		p.codingHooks = hello.CodingHooks && s.cfg.CodingHooks
+	} else if hello.InstanceID != "" || hello.PreviousGeneration != 0 || hello.ControlEvents || hello.CodingHooks {
 		return
 	}
 	interval, ok := agentproto.HeartbeatInterval(s.cfg.AgentHeartbeatSeconds)
@@ -228,6 +235,7 @@ func (s *Server) agentUpgrade(w http.ResponseWriter, r *http.Request) {
 	ack := agentproto.HelloAck{Type: "hello.ack", Version: version, AgentID: p.id, Generation: p.generation}
 	if version == agentproto.Version {
 		ack.HeartbeatSeconds = int(interval / time.Second)
+		ack.ControlEvents, ack.CodingHooks = p.controlEvents, p.codingHooks
 	}
 	if agentproto.Write(helloCtx, conn, ack) != nil {
 		return
@@ -241,12 +249,12 @@ func (s *Server) agentUpgrade(w http.ResponseWriter, r *http.Request) {
 	if version == agentproto.LegacyVersion {
 		workers.Go(p.pingLegacy)
 	}
-	p.readResults()
+	p.readResults(s)
 	cancel()
 	workers.Wait()
 }
 
-func (p *agentPeer) readResults() {
+func (p *agentPeer) readResults(s *Server) {
 	for {
 		ctx := p.ctx
 		stop := func() {}
@@ -265,6 +273,27 @@ func (p *agentPeer) readResults() {
 		if message.Type == agentproto.HeartbeatType && p.instance != "" {
 			if !p.receiveHeartbeat(data) {
 				return
+			}
+			continue
+		}
+		if message.Type == agentproto.InventoryChanged && p.controlEvents {
+			var event agentproto.InventoryEvent
+			if agentproto.Decode(data, &event) != nil || event.AgentID != p.id ||
+				event.Generation != p.generation || event.Sequence <= p.eventSequence.Load() {
+				return
+			}
+			p.eventSequence.Store(event.Sequence)
+			continue
+		}
+		if message.Type == agentproto.CodingEvent && p.codingHooks {
+			var event agentproto.CodingMessage
+			if agentproto.Decode(data, &event) != nil || event.AgentID != p.id ||
+				event.Generation != p.generation || !event.Valid() {
+				return
+			}
+			if time.Since(p.lastNotice) >= 500*time.Millisecond {
+				p.lastNotice = time.Now()
+				s.recordCodingNotice(p, event)
 			}
 			continue
 		}

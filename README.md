@@ -46,7 +46,7 @@ Mutasi tmux melalui Agent masih dijadwalkan.
    ke listener localhost. Batasi akses dari mesin Agent melalui Tailscale Grants.
    Aktifkan `TMUX_MONITOR_AGENT_ENABLED=true` dan `TMUX_MONITOR_DEV=false`.
    Gunakan origin HTTPS dengan hostname Serve `.ts.net` dan jalankan hub dari
-   source terbaru. Backup SQLite sebelum naik ke schema007.
+   source terbaru. Backup SQLite sebelum naik ke schema008.
 2. Build binary Agent untuk Linux atau macOS target dengan
    `go build -trimpath -o bin/agent ./cmd/agent`. Binary juga dihasilkan
    oleh `make build`.
@@ -459,6 +459,20 @@ shell atau input terminal. Viewer PTY terpisah memerlukan opt-in dan aktivasi
 seperti panduan di atas; input tidak diputar ulang. Jika penghapusan
 file secret gagal setelah revoke/rotasi, reference tetap nonaktif; periksa dan
 bersihkan file yatim saat maintenance dengan hub berhenti.
+
+## Inventaris langsung, tab terminal, dan notifikasi
+
+Set `TMUX_MONITOR_CONTROL_EVENTS=true` untuk mencoba pembaruan inventaris
+setelah host diperiksa dari halaman detail. Untuk profil Agent, tambahkan
+`--control-events` pada `agent run`. Bila stream terputus atau tmux tidak
+kompatibel, halaman detail mengambil snapshot secara berkala. Fitur ini
+masih eksperimental. Viewer live pane independen tetap dinonaktifkan sampai
+isolasi dari klien desktop dibuktikan. [Panduan control mode tmux](https://github.com/tmux/tmux/wiki/Control-Mode)
+
+Detail host mendukung filter inventaris dan sampai empat tab session. Pindah
+tab membuka viewer read-only dan melepas viewer lama. Favorit host disimpan
+per akun di browser ini. Untuk opt-in hook Codex, Claude Code dan Web Push,
+lihat [panduan notifikasi](docs/coding-notifications.md).
 
 ## Pemeriksaan
 

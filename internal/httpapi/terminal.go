@@ -37,7 +37,7 @@ var terminalEpoch = regexp.MustCompile(`^e_[0-9a-f]{64}$`)
 
 func (s *Server) terminalOptions(w http.ResponseWriter, r *http.Request) {
 	s.json(w, 200, map[string]any{"enabled": s.cfg.TerminalEnabled, "mode": "read_only",
-		"paneSnapshotEnabled": s.cfg.PaneSnapshotEnabled, "agentTerminalEnabled": s.agentTerminalEnabled()})
+		"paneSnapshotEnabled": s.cfg.PaneSnapshotEnabled, "agentTerminalEnabled": s.agentTerminalEnabled(), "controlEvents": s.cfg.ControlEvents})
 }
 
 func (s *Server) terminalTicket(w http.ResponseWriter, r *http.Request) {
